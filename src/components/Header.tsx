@@ -142,7 +142,7 @@ export const Header: React.FC<HeaderProps> = ({
                 className="school-logo-3d h-12 w-12 shrink-0 object-contain sm:h-16 sm:w-16 lg:h-[4.5rem] lg:w-[4.5rem]"
               />
               <span className="min-w-0">
-                <span className="block break-words font-serif-title text-[9px] font-bold leading-tight tracking-tight text-blue-950 transition-colors group-hover:text-blue-900 min-[375px]:text-[10px] sm:whitespace-nowrap sm:text-lg lg:text-xl dark:text-blue-100">
+                <span className="block break-words font-serif-title text-[10px] font-bold leading-tight tracking-tight text-blue-950 transition-colors group-hover:text-blue-900 min-[375px]:text-xs sm:whitespace-nowrap sm:text-lg lg:text-xl dark:text-blue-100">
                   SMA NEGERI 1 HALMAHERA TENGAH
                 </span>
                 <span className="mt-1 hidden whitespace-nowrap text-[7px] font-semibold uppercase tracking-[0.08em] text-slate-500 min-[420px]:block min-[420px]:text-[8px] sm:text-[10px] lg:text-[11px] dark:text-slate-400">

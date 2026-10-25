@@ -42,9 +42,9 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenPortal }) 
   };
 
   return (
-    <div className="space-y-16 lg:space-y-24 pb-20">
+    <div className="space-y-12 pb-16 sm:space-y-16 sm:pb-20 lg:space-y-24">
       {/* 1. HERO SECTION */}
-      <section className="relative flex min-h-[500px] items-center overflow-hidden bg-slate-900 text-white sm:min-h-[560px] lg:min-h-[640px]">
+      <section className="relative flex min-h-[430px] items-center overflow-hidden bg-slate-900 text-white min-[420px]:min-h-[460px] sm:min-h-[560px] lg:min-h-[640px]">
         {/* Background Image with Measured Contrast Scrim */}
         <div
           className="absolute inset-0 overflow-hidden"
@@ -87,8 +87,8 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenPortal }) 
           )}
         </div>
 
-        <div className="relative mx-auto w-full max-w-7xl px-4 py-16 sm:px-8 sm:py-20 lg:py-28">
-          <div className="max-w-2xl space-y-6">
+        <div className="relative mx-auto w-full max-w-7xl px-4 py-12 sm:px-8 sm:py-20 lg:py-28">
+          <div className="max-w-2xl space-y-5 sm:space-y-6">
             <div className="flex items-center gap-2 text-xs font-semibold text-amber-400 uppercase tracking-widest">
               <span>SMA Negeri 1 Halmahera Tengah</span>
               <span aria-hidden="true">·</span>
@@ -127,7 +127,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenPortal }) 
 
       {/* 2. QUANTITATIVE PROOF STRIP */}
       <section className="max-w-7xl mx-auto px-4 sm:px-8 -mt-10 lg:-mt-16 relative z-10">
-        <div className="bg-white rounded-xl shadow-xl border border-slate-200/80 p-6 lg:p-8 grid grid-cols-2 md:grid-cols-4 gap-6 lg:gap-8">
+        <div className="bg-white rounded-xl shadow-xl border border-slate-200/80 p-4 sm:p-6 lg:p-8 grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
           <div className="border-l-2 border-blue-900 pl-4 space-y-1">
             <span className="font-mono text-2xl sm:text-3xl font-bold text-slate-900 tabular-nums">1.280+</span>
             <p className="text-xs sm:text-sm text-slate-600 font-medium">Peserta Didik Aktif</p>

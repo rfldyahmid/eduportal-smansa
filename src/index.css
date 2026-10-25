@@ -14,6 +14,7 @@
   html {
     scroll-behavior: smooth;
     -webkit-text-size-adjust: 100%;
+    scroll-padding-top: 5rem;
   }
 
   body {
@@ -32,11 +33,37 @@
     max-width: 100%;
   }
 
+  main {
+    min-width: 0;
+  }
+
+  main .grid > * {
+    min-width: 0;
+  }
+
+  main :is(input, select, textarea) {
+    max-width: 100%;
+  }
+
+  main :is(h1, h2, h3, p, td, th, label, a) {
+    overflow-wrap: break-word;
+  }
+
+  main [class*="overflow-x-auto"] {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+
   button,
   input,
   select,
   textarea {
     font: inherit;
+  }
+
+  button,
+  a {
+    touch-action: manipulation;
   }
 
   .font-serif-title {
@@ -242,6 +269,12 @@
   select,
   textarea {
     font-size: 16px;
+  }
+
+  .school-header [id="mobile-navigation"] {
+    max-height: calc(100dvh - 4rem);
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
   }
 }
 
