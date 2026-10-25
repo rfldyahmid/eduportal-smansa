@@ -1,0 +1,16 @@
+node_modules/
+.env
+.env.*
+!.env.example
+
+dist/
+server.js
+
+*.log
+npm-error.txt
+
+.DS_Store
+Thumbs.db
+data/db.json
+data/uploads/
+migration-report.json

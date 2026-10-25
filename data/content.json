@@ -1,0 +1,106 @@
+{
+  "announcements": [
+    {
+      "id": "ann-1",
+      "title": "Kontingen SMAN 1 Halmahera Tengah Raih Prestasi di KSN Sains Maluku Utara & Lolos Nasional",
+      "category": "Prestasi",
+      "date": "28 September 2026",
+      "author": "Tim Humas & Prestasi Sekolah",
+      "summary": "Rafi Pratama dan tim sains berhasil menorehkan prestasi membanggakan pada seleksi Olimpiade Sains tingkat Provinsi Maluku Utara di Ternate.",
+      "content": "Prestasi gemilang kembali ditorehkan oleh kontingen sains SMA Negeri 1 Halmahera Tengah. Dalam perhelatan seleksi Olimpiade Sains tingkat Provinsi Maluku Utara, kontingen sekolah berhasil meraih medali dan tiket melaju ke tingkat nasional. Prestasi diraih oleh Rafi Pratama (Kelas XII MIPA 1) pada bidang Fisika Peminatan serta tim riset lingkungan bahari Teluk Weda. Kepala Sekolah Abdul Kadir Talib, S.Pd.I., M.Pd. menyampaikan ucapan selamat dan apresiasi setinggi-tingginya kepada seluruh peserta didik dan guru pembina atas kerja keras mengharumkan bumi Fagogoru.",
+      "isImportant": true
+    },
+    {
+      "id": "ann-2",
+      "title": "Pembukaan Pendaftaran Siswa Baru (PPDB 2026/2027) SMAN 1 Halmahera Tengah Resmi Dimulai",
+      "category": "PPDB",
+      "date": "24 September 2026",
+      "author": "Panitia PPDB SMAN 1 Halmahera Tengah",
+      "summary": "Calon peserta didik baru di Kabupaten Halmahera Tengah dapat mengakses formulir pendaftaran daring dan memantau status seleksi secara mandiri.",
+      "content": "Penerimaan Peserta Didik Baru (PPDB) Tahun Ajaran 2026/2027 resmi dibuka secara serentak mulai tanggal 15 Oktober 2026. Tersedia empat jalur seleksi: Jalur Zonasi (50%) untuk calon siswa berdomisili di Weda dan sekitarnya, Jalur Prestasi Akademik & Non-Akademik (30%), Jalur Afirmasi (15%), dan Jalur Perpindahan Tugas Orang Tua (5%). Pendaftaran 100% bebas biaya dan dapat diakses langsung melalui website ini.",
+      "isImportant": true
+    },
+    {
+      "id": "ann-3",
+      "title": "Jadwal Asesmen Sumatif Tengah Semester (PTS) Ganjil & Sosialisasi SNBP/SNBT 2027",
+      "category": "Akademik",
+      "date": "19 September 2026",
+      "author": "Bagian Kurikulum & Pengajaran",
+      "summary": "Seluruh siswa kelas X, XI, dan XII dapat memeriksa jadwal pelaksanaan ujian dan daftar capaian kompetensi melalui portal akademik terintegrasi masing-masing.",
+      "content": "Pelaksanaan Asesmen Sumatif Tengah Semester (PTS) Ganjil Tahun Ajaran 2026/2027 di SMAN 1 Halmahera Tengah akan diselenggarakan mulai hari Senin pekan depan. Jadwal lengkap per mata pelajaran beserta ruang ujian telah tersedia di portal akademik siswa masing-masing. Bersamaan dengan itu, tim BK menyelenggarakan sesi pendampingan persiapan seleksi perguruan tinggi negeri (SNBP & SNBT 2027).",
+      "isImportant": false
+    },
+    {
+      "id": "ann-4",
+      "title": "Sosialisasi Program Beasiswa Industri Halmahera Tengah & Beasiswa Indonesia Maju",
+      "category": "Kegiatan",
+      "date": "14 September 2026",
+      "author": "Unit Bimbingan Konseling (BK)",
+      "summary": "Pendampingan studi lanjut, persiapan beasiswa industri daerah, dan seleksi beasiswa prestasi perguruan tinggi bagi siswa kelas XII.",
+      "content": "Unit Bimbingan Konseling mengundang orang tua dan peserta didik kelas XII untuk mengikuti sosialisasi peluang beasiswa pendidikan tinggi kerja sama Pemda Halmahera Tengah, sektor industri terpadu Weda Bay, serta Beasiswa Indonesia Maju (BIM) Puspresnas. Kegiatan dilaksanakan di Aula Pertemuan SMAN 1 Halmahera Tengah.",
+      "isImportant": false
+    }
+  ],
+  "gallery": [
+    {
+      "id": "gal-1",
+      "title": "Kegiatan Senam Pagi Setiap Hari Jumat",
+      "category": "Olahraga",
+      "date": "22 September 2026",
+      "image": "/gallery-seed/senam.jpg",
+      "description": "Siswa melakukan senam pagi setiap hari Jumat.",
+      "photographer": "Tim Dokumentasi OSIS",
+      "createdAt": "2026-09-22T08:00:00+09:00"
+    },
+    {
+      "id": "gal-2",
+      "title": "Penyerahan Piala Juara Umum Kejuaraan Pelajar Maluku Utara",
+      "category": "Prestasi",
+      "date": "18 September 2026",
+      "image": "/gallery-seed/prestasi.jpg",
+      "description": "Kontingen SMAN 1 Halmahera Tengah merayakan prestasi pada ajang kompetisi pelajar.",
+      "photographer": "Humas Sekolah",
+      "createdAt": "2026-09-18T08:00:00+09:00"
+    },
+    {
+      "id": "gal-3",
+      "title": "Paskibraka SMAN 1 Halmahera Tengah dalam Upacara HUT RI",
+      "category": "Upacara",
+      "date": "17 Agustus 2026",
+      "image": "https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?auto=format&fit=crop&q=80&w=1200",
+      "description": "Pasukan pengibar bendera sekolah melaksanakan tugas dengan khidmat.",
+      "photographer": "Divisi Fotografi Kesiswaan",
+      "createdAt": "2026-08-17T08:00:00+09:00"
+    },
+    {
+      "id": "gal-4",
+      "title": "Inkubasi Komputer & Sains Lingkungan Bahari Teluk Weda",
+      "category": "Ekstrakurikuler",
+      "date": "10 September 2026",
+      "image": "https://images.unsplash.com/photo-1485827404703-89b55fcc595e?auto=format&fit=crop&q=80&w=1200",
+      "description": "Klub Sains mempresentasikan instrumen pemantauan kualitas air pesisir.",
+      "photographer": "Klub Sains SMAN 1 Halteng",
+      "createdAt": "2026-09-10T08:00:00+09:00"
+    },
+    {
+      "id": "gal-5",
+      "title": "Pentas Seni Budaya Fagogoru & Tarian Lalayon Siswa",
+      "category": "Sosialisasi",
+      "date": "28 Agustus 2026",
+      "image": "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&q=80&w=1200",
+      "description": "Kegiatan seni budaya siswa dalam rangka pelestarian budaya Fagogoru.",
+      "photographer": "Panitia Pentas Seni",
+      "createdAt": "2026-08-28T08:00:00+09:00"
+    },
+    {
+      "id": "gal-6",
+      "title": "Final Turnamen Futsal & Atletik Antar Pelajar se-Halteng",
+      "category": "Olahraga",
+      "date": "05 September 2026",
+      "image": "https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&q=80&w=1200",
+      "description": "Pertandingan tim olahraga SMAN 1 Halmahera Tengah pada ajang pelajar daerah.",
+      "photographer": "Divisi Olahraga OSIS",
+      "createdAt": "2026-09-05T08:00:00+09:00"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "name": "SMA Negeri 1 Nusantara - Portal Sekolah",
+  "description": "Website resmi SMA Negeri 1 Halmahera Tengah (Weda, Maluku Utara) dengan pendaftaran siswa baru (PPDB), profil guru, galeri kegiatan, visi misi, serta portal akademik siswa dan guru untuk jadwal dan nilai terenkripsi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
