@@ -48,16 +48,32 @@ export const Header: React.FC<HeaderProps> = ({
 
   useEffect(() => {
     let lastScrollY = window.scrollY;
+    let accumulatedScrollDelta = 0;
     let animationFrame = 0;
 
     const updateHeaderOnScroll = () => {
       animationFrame = 0;
       const currentScrollY = window.scrollY;
+      const scrollDelta = currentScrollY - lastScrollY;
 
-      if (currentScrollY <= 8 || currentScrollY < lastScrollY) {
+      if (currentScrollY <= 8) {
         setIsCollapsed(false);
-      } else if (currentScrollY > lastScrollY && currentScrollY > 90) {
-        setIsCollapsed(true);
+        accumulatedScrollDelta = 0;
+      } else if (mobileMenuOpen) {
+        setIsCollapsed(false);
+        accumulatedScrollDelta = 0;
+      } else if (scrollDelta > 0) {
+        accumulatedScrollDelta = Math.max(0, accumulatedScrollDelta) + scrollDelta;
+        if (accumulatedScrollDelta >= 12 && currentScrollY > 90) {
+          setIsCollapsed(true);
+          accumulatedScrollDelta = 0;
+        }
+      } else if (scrollDelta < 0) {
+        accumulatedScrollDelta = Math.min(0, accumulatedScrollDelta) + scrollDelta;
+        if (accumulatedScrollDelta <= -12) {
+          setIsCollapsed(false);
+          accumulatedScrollDelta = 0;
+        }
       }
 
       lastScrollY = currentScrollY;
@@ -74,7 +90,7 @@ export const Header: React.FC<HeaderProps> = ({
       window.removeEventListener('scroll', handleScroll);
       if (animationFrame) window.cancelAnimationFrame(animationFrame);
     };
-  }, []);
+  }, [mobileMenuOpen]);
 
   useEffect(() => {
     let active = true;
@@ -129,8 +145,8 @@ export const Header: React.FC<HeaderProps> = ({
       ref={headerRef}
       className={`school-header${isCollapsed ? ' header-collapsed' : ''}`}
     >
-      <div ref={upperAreaRef} className="school-header__upper">
-        <div className="border-b border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900">
+      <div className="school-header__upper">
+        <div ref={upperAreaRef} className="border-b border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900">
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-3 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-6">
             <button
               onClick={() => handleNavClick('beranda')}
@@ -170,7 +186,7 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 sm:px-6 lg:px-8">
           <button
             onClick={() => setMobileMenuOpen(open => !open)}
-            className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-blue-950 transition-colors hover:bg-blue-900/10 hover:text-blue-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-700 lg:hidden dark:text-slate-100 dark:hover:bg-white/10 dark:hover:text-amber-300 dark:focus-visible:outline-amber-300"
+            className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-blue-950 transition-colors hover:bg-blue-900/10 hover:text-blue-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-700 xl:hidden dark:text-slate-100 dark:hover:bg-white/10 dark:hover:text-amber-300 dark:focus-visible:outline-amber-300"
             aria-label={mobileMenuOpen ? 'Tutup menu navigasi' : 'Buka menu navigasi'}
             aria-expanded={mobileMenuOpen}
             aria-controls="mobile-navigation"
@@ -181,7 +197,7 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </button>
 
-          <div className="hidden min-w-0 flex-1 items-center gap-3 lg:flex xl:gap-6">
+          <div className="hidden min-w-0 flex-1 items-center gap-3 xl:flex xl:gap-6">
             <div className="flex min-w-0 flex-1 items-center justify-between gap-1">
               {navLinks.map(link => {
                 const isActive = currentTab === link.id;
@@ -233,7 +249,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 lg:hidden">
+          <div className="flex items-center gap-2 xl:hidden">
             {currentUser ? (
               <>
                 <button onClick={onOpenPortal} aria-label="Dashboard" className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-blue-900/30 text-blue-950 transition-colors hover:bg-blue-900/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-700 dark:border-white/30 dark:text-white dark:hover:bg-white/10 dark:focus-visible:outline-amber-300">
@@ -261,7 +277,7 @@ export const Header: React.FC<HeaderProps> = ({
 
         <div
           id="mobile-navigation"
-          className={`${mobileMenuOpen ? 'block' : 'hidden'} border-t border-slate-100 bg-white px-4 py-3 shadow-lg animate-in fade-in duration-150 lg:hidden dark:border-slate-800 dark:bg-slate-950`}
+          className={`${mobileMenuOpen ? 'block' : 'hidden'} border-t border-slate-100 bg-white px-4 py-3 shadow-lg animate-in fade-in duration-150 xl:hidden dark:border-slate-800 dark:bg-slate-950`}
         >
             <div className="mx-auto max-w-7xl space-y-1">
               {navLinks.map(link => (
