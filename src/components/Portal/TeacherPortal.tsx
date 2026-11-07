@@ -87,7 +87,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onLog
     subject: teacher.subject,
     teacherName: teacher.fullName,
     teacherId: teacher.id,
-    classId: teacher.classesTaught[0] || 'X-1',
+    classId: teacher.classesTaught[0] || 'X-A',
     room: '',
     colorTag: 'blue'
   });
@@ -97,8 +97,8 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onLog
     subject: teacher.subject,
     teacherId: teacher.id,
     teacherName: teacher.fullName,
-    classId: teacher.classesTaught[0] || 'X-1',
-    className: teacher.classesTaught[0] || 'X-1',
+    classId: teacher.classesTaught[0] || 'X-A',
+    className: teacher.classesTaught[0] || 'X-A',
     title: '',
     description: '',
     deadline: '2026-10-30T23:59',
@@ -181,7 +181,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onLog
       subject: teacher.subject,
       teacherName: teacher.fullName,
       teacherId: teacher.id,
-      classId: teacher.classesTaught[0] || 'X-1',
+      classId: teacher.classesTaught[0] || 'X-A',
       room: '',
       colorTag: 'blue'
     });
@@ -194,8 +194,8 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onLog
       subject: teacher.subject,
       teacherId: teacher.id,
       teacherName: teacher.fullName,
-      classId: teacher.classesTaught[0] || 'X-1',
-      className: teacher.classesTaught[0] || 'X-1',
+      classId: teacher.classesTaught[0] || 'X-A',
+      className: teacher.classesTaught[0] || 'X-A',
       title: '',
       description: '',
       deadline: '2026-10-30T23:59',

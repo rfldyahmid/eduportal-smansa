@@ -21,6 +21,7 @@ import { DEFAULT_CONTACT_INFO } from '../src/utils/contactInfoDefaults';
 import { DEFAULT_KOMBEL_INFO } from '../src/utils/kombelInfoDefaults';
 import { listAnnouncements } from './repositories/announcements';
 import { pool } from './pg';
+import { normalizeSchoolClassId } from '../src/utils/schoolClasses';
 
 export interface DatabaseSchema {
   users: UserAccount[];
@@ -161,23 +162,34 @@ export async function resetSchoolData(): Promise<{ removedUsers: number; removed
 }
 
 export function ensureDefaults(data: Partial<DatabaseSchema>): DatabaseSchema {
-  const students = Array.isArray(data.students) ? data.students : [];
+  const students = (Array.isArray(data.students) ? data.students : []).map(student => {
+    const { major: _legacyMajor, ...profile } = student as Student & { major?: unknown };
+    const classId = normalizeSchoolClassId(profile.classId || '');
+    return { ...profile, classId, className: classId };
+  });
   const teachers = Array.isArray(data.teachers) ? data.teachers : [];
   return {
     users: Array.isArray(data.users) ? data.users : [],
     students,
     teachers: teachers.map(teacher => {
-      if (typeof teacher.homeroomClass === 'string') return teacher;
+      const classesTaught = (teacher.classesTaught || []).map(normalizeSchoolClassId);
+      const homeroomClass = teacher.homeroomClass
+        ? normalizeSchoolClassId(teacher.homeroomClass)
+        : undefined;
+      if (homeroomClass) return { ...teacher, classesTaught, homeroomClass };
       const assignedClasses = new Set(
         students
           .filter(student => student.homeroomTeacher === teacher.fullName)
           .map(student => student.classId)
       );
       return assignedClasses.size === 1
-        ? { ...teacher, homeroomClass: assignedClasses.values().next().value }
-        : teacher;
+        ? { ...teacher, classesTaught, homeroomClass: assignedClasses.values().next().value }
+        : { ...teacher, classesTaught };
     }),
-    schedules: Array.isArray(data.schedules) ? data.schedules : [],
+    schedules: (Array.isArray(data.schedules) ? data.schedules : []).map(item => ({
+      ...item,
+      classId: normalizeSchoolClassId(item.classId)
+    })),
     ppdb: Array.isArray(data.ppdb) ? data.ppdb : [],
     messages: Array.isArray(data.messages) ? data.messages : [],
     contactInfo: { ...DEFAULT_CONTACT_INFO, ...(data.contactInfo || {}) },
@@ -188,9 +200,18 @@ export function ensureDefaults(data: Partial<DatabaseSchema>): DatabaseSchema {
     kombelActivities: Array.isArray(data.kombelActivities) ? data.kombelActivities : [],
     kombelAgendas: Array.isArray(data.kombelAgendas) ? data.kombelAgendas : [],
     kombelInfo: { ...DEFAULT_KOMBEL_INFO, ...(data.kombelInfo || {}) },
-    assignments: Array.isArray(data.assignments) ? data.assignments : [],
-    submissions: Array.isArray(data.submissions) ? data.submissions : [],
-    portalAnnouncements: Array.isArray(data.portalAnnouncements) ? data.portalAnnouncements : [],
+    assignments: (Array.isArray(data.assignments) ? data.assignments : []).map(item => {
+      const classId = normalizeSchoolClassId(item.classId);
+      return { ...item, classId, className: classId };
+    }),
+    submissions: (Array.isArray(data.submissions) ? data.submissions : []).map(item => ({
+      ...item,
+      classId: normalizeSchoolClassId(item.classId)
+    })),
+    portalAnnouncements: (Array.isArray(data.portalAnnouncements) ? data.portalAnnouncements : []).map(item => ({
+      ...item,
+      targetClass: item.targetClass ? normalizeSchoolClassId(item.targetClass) : undefined
+    })),
     passwordResets: Array.isArray(data.passwordResets) ? data.passwordResets : []
   };
 }

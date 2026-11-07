@@ -5,6 +5,7 @@ import {
   ValidationError,
   createAnnouncement,
   deleteAnnouncement,
+  deleteAnnouncements,
   getAnnouncement,
   listAnnouncements,
   updateAnnouncement,
@@ -152,6 +153,31 @@ export function registerAnnouncementRoutes(app: Express, { persistImage, safeDel
       res.status(204).end();
     } catch (err) {
       sendError(res, err, 'Gagal menghapus pengumuman.');
+    }
+  });
+
+  app.post('/api/announcements/bulk-delete', requireAdmin, async (req, res) => {
+    try {
+      const requestedIds: unknown[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+      const ids = [...new Set(requestedIds.filter((id): id is string =>
+        typeof id === 'string' && id.trim().length > 0
+      ))];
+      if (!ids.length || ids.length > 500) {
+        return res.status(400).json({ message: 'Pilih 1 sampai 500 pengumuman untuk dihapus.' });
+      }
+
+      const deleted = await deleteAnnouncements(ids);
+      for (const item of deleted) {
+        for (const image of new Set([item.image, ...(item.images || [])])) {
+          await safeDeleteImage(image);
+        }
+      }
+      res.json({
+        message: `${deleted.length} pengumuman dipindahkan ke Tempat Sampah dan dapat dipulihkan.`,
+        removedCount: deleted.length
+      });
+    } catch (err) {
+      sendError(res, err, 'Gagal menghapus pengumuman terpilih.');
     }
   });
 }

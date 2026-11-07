@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Student,
   Teacher,
@@ -62,6 +62,9 @@ import {
   replyToContactMessage,
   removeContactMessage,
   fetchUsers,
+  syncAdminRoster,
+  bulkDeleteAdminItems,
+  type BulkDeleteCollection,
   provisionLinkedAccounts,
   resetSchoolData as apiResetSchoolData,
   createManagedUser,
@@ -69,7 +72,9 @@ import {
   bulkDeleteManagedUsers,
   fetchTrash,
   restoreTrashItem,
+  restoreSelectedTrashItems,
   permanentlyDeleteTrashItem,
+  permanentlyDeleteSelectedTrashItems,
   type DeletedItemSummary,
   apiAdminResetPassword,
   fileToDataUrl
@@ -109,9 +114,12 @@ import {
   ChevronLeft,
   ChevronRight,
   Send,
-  Contact
+  Contact,
+  FileSpreadsheet,
+  Download
 } from 'lucide-react';
 import { DEFAULT_CONTACT_INFO, CONTACT_INFO_UPDATED_EVENT } from '../../utils/contactInfo';
+import { SCHOOL_CLASSES } from '../../utils/schoolClasses';
 
 interface AdminPortalProps {
   currentUser: UserAccount;
@@ -206,9 +214,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
     nisn: '',
     nis: '',
     gender: 'Laki-laki' as 'Laki-laki' | 'Perempuan',
-    classId: 'XII-MIPA-1',
-    className: 'XII MIPA 1 (Sains Unggulan)',
-    major: 'MIPA' as 'MIPA' | 'IPS' | 'Fase E (Umum)',
+    classId: 'X-A',
+    className: 'X-A',
     homeroomTeacher: 'Dra. Sri Wahyuni, M.Si'
   });
 
@@ -224,7 +231,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
     degree: '',
     subject: '',
     department: 'MIPA' as Teacher['department'],
-    classesTaught: ['XII-MIPA-1'],
+    classesTaught: ['X-A'],
     homeroomClass: '',
     education: '',
     email: '',
@@ -232,11 +239,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
     photoUrl: '',
     bio: ''
   });
-  const homeroomClassOptions = Array.from(new Set([
-    ...students.map(student => student.classId),
-    ...teachers.flatMap(teacher => teacher.classesTaught || []),
-    ...teachers.map(teacher => teacher.homeroomClass || '')
-  ].filter(Boolean))).sort();
+  const homeroomClassOptions = SCHOOL_CLASSES;
 
   // ---------------- PPDB APPLICANTS STATE ----------------
   const [applicants, setApplicants] = useState<PPDBApplicant[]>([]);
@@ -369,11 +372,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
   const [userAccountForm, setUserAccountForm] = useState({
     username: '', fullName: '', email: '', role: 'siswa' as UserRole
   });
+  const rosterFileInputRef = useRef<HTMLInputElement>(null);
+  const [isImportingRoster, setIsImportingRoster] = useState(false);
   const [isBulkAccountDeleteMode, setIsBulkAccountDeleteMode] = useState(false);
   const [selectedAccountIds, setSelectedAccountIds] = useState<Set<string>>(new Set());
   const [isDeletingAccounts, setIsDeletingAccounts] = useState(false);
+  const [bulkDeleteCollection, setBulkDeleteCollection] = useState<BulkDeleteCollection | null>(null);
+  const [selectedBulkIds, setSelectedBulkIds] = useState<Set<string>>(new Set());
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [trashItems, setTrashItems] = useState<DeletedItemSummary[]>([]);
   const [isLoadingTrash, setIsLoadingTrash] = useState(false);
+  const [isTrashActionInProgress, setIsTrashActionInProgress] = useState(false);
+  const [trashBulkAction, setTrashBulkAction] = useState<'restore' | 'delete' | null>(null);
+  const [selectedTrashIds, setSelectedTrashIds] = useState<Set<string>>(new Set());
 
   // Status sinkronisasi backend
   const [isSyncing, setIsSyncing] = useState(false);
@@ -400,7 +411,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
         fetchSubmissions(),
         fetchHomeHeroSlides()
       ]);
-
       if (results[0].status === 'fulfilled') {
         setStudents(results[0].value);
       }
@@ -463,7 +473,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
   const loadTrash = async () => {
     setIsLoadingTrash(true);
     try {
-      setTrashItems(await fetchTrash());
+      const items = await fetchTrash();
+      const availableIds = new Set(items.map(item => item.id));
+      setTrashItems(items);
+      setSelectedTrashIds(current => new Set([...current].filter(id => availableIds.has(id))));
     } catch (error) {
       window.alert(error instanceof Error ? error.message : 'Gagal memuat tempat sampah.');
     } finally {
@@ -476,7 +489,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
   }, [activeTab]);
 
   const handleRestoreTrashItem = async (item: DeletedItemSummary) => {
-    if (!window.confirm(`Pulihkan “${item.label}” ke data aktif?`)) return;
+    if (isTrashActionInProgress || !window.confirm(`Pulihkan “${item.label}” ke data aktif?`)) return;
+    setIsTrashActionInProgress(true);
     try {
       const result = await restoreTrashItem(item.id);
       window.alert(result.message);
@@ -484,18 +498,65 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
       await loadAllServerData();
     } catch (error) {
       window.alert(error instanceof Error ? error.message : 'Gagal memulihkan data.');
+    } finally {
+      setIsTrashActionInProgress(false);
+    }
+  };
+
+  const handleRestoreSelectedTrashItems = async () => {
+    if (isTrashActionInProgress || !selectedTrashIds.size) return;
+    const ids = [...selectedTrashIds];
+    if (!window.confirm(`Pulihkan ${ids.length} item terpilih? Data terkait seperti akun dan berkas juga dapat ikut dipulihkan.`)) return;
+    setIsTrashActionInProgress(true);
+    try {
+      const result = await restoreSelectedTrashItems(ids);
+      await loadTrash();
+      await loadAllServerData();
+      setSelectedTrashIds(new Set());
+      setTrashBulkAction(null);
+      window.alert(result.message);
+    } catch (error) {
+      await loadTrash();
+      await loadAllServerData();
+      window.alert(error instanceof Error ? error.message : 'Gagal memulihkan item terpilih.');
+    } finally {
+      setIsTrashActionInProgress(false);
     }
   };
 
   const handlePermanentlyDeleteTrashItem = async (item: DeletedItemSummary) => {
-    if (!window.confirm(`Hapus permanen “${item.label}”? Data ini tidak dapat dipulihkan setelahnya.`)) return;
+    if (isTrashActionInProgress || !window.confirm(`Hapus permanen “${item.label}”? Data ini tidak dapat dipulihkan setelahnya.`)) return;
+    setIsTrashActionInProgress(true);
     try {
       await permanentlyDeleteTrashItem(item.id);
       await loadTrash();
     } catch (error) {
       window.alert(error instanceof Error ? error.message : 'Gagal menghapus data permanen.');
+    } finally {
+      setIsTrashActionInProgress(false);
     }
   };
+
+  const handlePermanentlyDeleteSelectedTrashItems = async () => {
+    if (isTrashActionInProgress || !selectedTrashIds.size) return;
+    const ids = [...selectedTrashIds];
+    if (!window.confirm(`Hapus permanen ${ids.length} item terpilih dari Tempat Sampah? Tindakan ini tidak dapat dibatalkan.`)) return;
+    setIsTrashActionInProgress(true);
+    try {
+      const result = await permanentlyDeleteSelectedTrashItems(ids);
+      setTrashItems(current => current.filter(item => !selectedTrashIds.has(item.id)));
+      setSelectedTrashIds(new Set());
+      setTrashBulkAction(null);
+      window.alert(result.message);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Gagal menghapus item terpilih secara permanen.');
+    } finally {
+      setIsTrashActionInProgress(false);
+    }
+  };
+
+  const visibleTrashIds = trashItems.map(item => item.id);
+  const allTrashSelected = visibleTrashIds.length > 0 && visibleTrashIds.every(id => selectedTrashIds.has(id));
 
   useEffect(() => {
     loadAllServerData();
@@ -507,6 +568,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
       window.removeEventListener('gallery-updated', handleSync);
     };
   }, []);
+
+  useEffect(() => {
+    setBulkDeleteCollection(null);
+    setSelectedBulkIds(new Set());
+  }, [activeTab, internalSubTab, kombelSubTab]);
 
   // ---------------- STUDENTS CRUD ----------------
   const filteredStudents = students.filter(std => {
@@ -526,9 +592,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
       nisn: '',
       nis: '',
       gender: 'Laki-laki',
-      classId: 'XII-MIPA-1',
-      className: 'XII MIPA 1 (Sains Unggulan)',
-      major: 'MIPA',
+      classId: 'X-A',
+      className: 'X-A',
       homeroomTeacher: 'Dra. Sri Wahyuni, M.Si'
     });
     setIsStudentModalOpen(true);
@@ -544,7 +609,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
       gender: std.gender,
       classId: std.classId,
       className: std.className,
-      major: std.major,
       homeroomTeacher: std.homeroomTeacher
     });
     setIsStudentModalOpen(true);
@@ -613,7 +677,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
       degree: 'S.Pd',
       subject: '',
       department: 'MIPA',
-      classesTaught: ['XII-MIPA-1'],
+      classesTaught: ['X-A'],
       homeroomClass: '',
       education: 'S1 Pendidikan, Universitas Khairun (Unkhair)',
       email: '',
@@ -690,6 +754,44 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
       loadAllServerData();
     } catch (err: any) {
       alert(err?.message || 'Gagal menyimpan data guru.');
+    }
+  };
+
+  const handleDownloadRosterTemplate = async () => {
+    try {
+      const { downloadRosterTemplate } = await import('../../utils/rosterExcel');
+      await downloadRosterTemplate();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Gagal membuat template Excel.');
+    }
+  };
+
+  const handleRosterFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || isImportingRoster) return;
+
+    setIsImportingRoster(true);
+    try {
+      const { parseRosterWorkbook } = await import('../../utils/rosterExcel');
+      const roster = await parseRosterWorkbook(file);
+      const total = roster.students.length + roster.teachers.length;
+      if (!window.confirm(
+        `File berisi ${roster.students.length} siswa dan ${roster.teachers.length} guru/staf. ` +
+        'Data akan ditambahkan atau diperbarui berdasarkan NISN/NIP. Data yang tidak ada di file tetap dipertahankan. ' +
+        'Akun portal tidak dibuat. Lanjutkan sinkronisasi?'
+      )) return;
+
+      const result = await syncAdminRoster(roster);
+      await loadAllServerData();
+      window.alert(
+        `${result.message}\nSiswa: ${result.students.created} ditambahkan, ${result.students.updated} diperbarui.\n` +
+        `Guru/staf: ${result.teachers.created} ditambahkan, ${result.teachers.updated} diperbarui.\nTotal baris diproses: ${total}.`
+      );
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Gagal membaca atau menyinkronkan file Excel.');
+    } finally {
+      setIsImportingRoster(false);
     }
   };
 
@@ -1510,6 +1612,94 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
     }
   };
 
+  const isBulkMode = (collection: BulkDeleteCollection) => bulkDeleteCollection === collection;
+
+  const toggleBulkDeleteMode = (collection: BulkDeleteCollection) => {
+    setSelectedBulkIds(new Set());
+    setBulkDeleteCollection(current => current === collection ? null : collection);
+  };
+
+  const toggleBulkItem = (id: string) => {
+    setSelectedBulkIds(previous => {
+      const next = new Set(previous);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkDeleteItems = async (collection: BulkDeleteCollection, label: string) => {
+    if (bulkDeleteCollection !== collection || !selectedBulkIds.size || isBulkDeleting) return;
+    const ids = [...selectedBulkIds];
+    if (!window.confirm(`Hapus ${ids.length} ${label} terpilih? Data akan dipindahkan ke Tempat Sampah dan dapat dipulihkan.`)) return;
+    setIsBulkDeleting(true);
+    try {
+      const result = await bulkDeleteAdminItems(collection, ids);
+      setSelectedBulkIds(new Set());
+      setBulkDeleteCollection(null);
+      if (collection === 'ppdb' && selectedApplicant && ids.includes(selectedApplicant.id)) {
+        setSelectedApplicant(null);
+        setCommitteeNotesDraft('');
+      }
+      if (collection === 'announcements') window.dispatchEvent(new Event('storage-announcements-updated'));
+      if (collection === 'gallery') window.dispatchEvent(new Event('gallery-updated'));
+      await loadAllServerData();
+      window.alert(result.message);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : `Gagal menghapus ${label} terpilih.`);
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
+  const bulkDeleteToolbar = (
+    collection: BulkDeleteCollection,
+    visibleIds: string[],
+    label: string
+  ) => {
+    const active = isBulkMode(collection);
+    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedBulkIds.has(id));
+    return (
+      <div className="flex min-w-0 max-w-full flex-nowrap items-center justify-start gap-2 overflow-x-auto pb-1 sm:justify-end">
+        <button
+          type="button"
+          onClick={() => toggleBulkDeleteMode(collection)}
+          className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${active ? 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50' : 'bg-rose-700 text-white hover:bg-rose-800'}`}
+        >
+          <Trash2 className="h-4 w-4" />
+          {active ? 'Batal pilih' : 'Pilih untuk hapus'}
+        </button>
+        {active && (
+          <>
+            <label className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700">
+              <input
+                type="checkbox"
+                aria-label={`Pilih semua ${label} yang ditampilkan`}
+                checked={allVisibleSelected}
+                disabled={!visibleIds.length}
+                onChange={event => setSelectedBulkIds(previous => {
+                  const next = new Set(previous);
+                  visibleIds.forEach(id => event.target.checked ? next.add(id) : next.delete(id));
+                  return next;
+                })}
+              />
+              Pilih semua tampil
+            </label>
+            <button
+              type="button"
+              onClick={() => handleBulkDeleteItems(collection, label)}
+              disabled={!selectedBulkIds.size || isBulkDeleting}
+              className="inline-flex items-center gap-2 rounded-lg bg-rose-700 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Trash2 className="h-4 w-4" />
+              {isBulkDeleting ? 'Menghapus...' : `Hapus Terpilih (${selectedBulkIds.size})`}
+            </button>
+          </>
+        )}
+      </div>
+    );
+  };
+
   const handleExecuteAdminReset = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedUserForReset || !tempPasswordInput) return;
@@ -1533,6 +1723,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
 
   return (
     <div className="mx-auto w-full min-w-0 max-w-7xl space-y-6 px-3 py-6 sm:space-y-8 sm:px-8 sm:py-8 lg:py-12">
+      <input
+        ref={rosterFileInputRef}
+        type="file"
+        accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        className="hidden"
+        onChange={handleRosterFileChange}
+      />
       {/* Admin Header */}
       <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900 p-4 text-white shadow-xl sm:p-8">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -1796,18 +1993,35 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                 className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-700 focus:ring-2 focus:ring-blue-900 focus:outline-none"
               >
                 <option value="Semua">Semua Kelas</option>
-                <option value="XII-MIPA-1">XII-MIPA-1</option>
-                <option value="XI-IPS-2">XI-IPS-2</option>
+                {SCHOOL_CLASSES.map(classId => <option key={classId} value={classId}>{classId}</option>)}
               </select>
             </div>
 
-            <button
-              onClick={handleOpenAddStudent}
-              className="px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-1.5 self-start sm:self-auto"
-            >
-              <UserPlus className="w-4 h-4" />
-              <span>Tambah Siswa Baru</span>
-            </button>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {bulkDeleteToolbar('students', filteredStudents.map(item => item.id), 'siswa')}
+              <button
+                type="button"
+                onClick={handleDownloadRosterTemplate}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                <Download className="h-4 w-4" /> Template Excel
+              </button>
+              <button
+                type="button"
+                onClick={() => rosterFileInputRef.current?.click()}
+                disabled={isImportingRoster}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <FileSpreadsheet className="h-4 w-4" /> {isImportingRoster ? 'Memproses Excel...' : 'Impor Excel'}
+              </button>
+              <button
+                onClick={handleOpenAddStudent}
+                className="px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-1.5 self-start sm:self-auto"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>Tambah Siswa Baru</span>
+              </button>
+            </div>
           </div>
 
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
@@ -1815,10 +2029,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-slate-50 text-slate-800 font-bold border-b border-slate-200">
+                    {isBulkMode('students') && <th className="w-10 px-3 py-3 text-center"></th>}
                     <th className="py-3 px-3 w-10 text-center">No</th>
                     <th className="py-3 px-4">Nama Lengkap Siswa</th>
                     <th className="py-3 px-3">NISN / NIS</th>
-                    <th className="py-3 px-3">Kelas & Jurusan</th>
+                    <th className="py-3 px-3">Kelas</th>
                     <th className="py-3 px-3">Jenis Kelamin</th>
                     <th className="py-3 px-3">Wali Kelas</th>
                     <th className="py-3 px-4 text-right">Aksi</th>
@@ -1827,13 +2042,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                 <tbody className="divide-y divide-slate-200 font-sans">
                   {filteredStudents.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-slate-400">
+                      <td colSpan={isBulkMode('students') ? 8 : 7} className="py-8 text-center text-slate-400">
                         Tidak ada siswa yang sesuai kriteria pencarian.
                       </td>
                     </tr>
                   ) : (
                     filteredStudents.map((std, idx) => (
                       <tr key={std.id} className="hover:bg-slate-50/70 transition-colors">
+                        {isBulkMode('students') && <td className="px-3 py-3 text-center"><input type="checkbox" aria-label={`Pilih siswa ${std.fullName}`} checked={selectedBulkIds.has(std.id)} onChange={() => toggleBulkItem(std.id)} /></td>}
                         <td className="py-3 px-3 text-center font-mono text-slate-400">
                           {idx + 1}
                         </td>
@@ -1845,7 +2061,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                         </td>
                         <td className="py-3 px-3 text-slate-700">
                           <span className="font-semibold">{std.className}</span>
-                          <span className="text-[11px] text-slate-400 block">{std.major}</span>
                         </td>
                         <td className="py-3 px-3 text-slate-600">{std.gender}</td>
                         <td className="py-3 px-3 text-slate-700">{std.homeroomTeacher}</td>
@@ -1908,13 +2123,31 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
               </select>
             </div>
 
-            <button
-              onClick={handleOpenAddTeacher}
-              className="px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-1.5 self-start sm:self-auto"
-            >
-              <UserPlus className="w-4 h-4" />
-              <span>Tambah Guru / Staf Baru</span>
-            </button>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {bulkDeleteToolbar('teachers', filteredTeachers.map(item => item.id), 'guru/staf')}
+              <button
+                type="button"
+                onClick={handleDownloadRosterTemplate}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                <Download className="h-4 w-4" /> Template Excel
+              </button>
+              <button
+                type="button"
+                onClick={() => rosterFileInputRef.current?.click()}
+                disabled={isImportingRoster}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <FileSpreadsheet className="h-4 w-4" /> {isImportingRoster ? 'Memproses Excel...' : 'Impor Excel'}
+              </button>
+              <button
+                onClick={handleOpenAddTeacher}
+                className="px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-1.5 self-start sm:self-auto"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>Tambah Guru / Staf Baru</span>
+              </button>
+            </div>
           </div>
 
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
@@ -1922,6 +2155,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-slate-50 text-slate-800 font-bold border-b border-slate-200">
+                    {isBulkMode('teachers') && <th className="w-10 px-3 py-3 text-center"></th>}
                     <th className="py-3 px-3 w-10 text-center">No</th>
                     <th className="py-3 px-4">Nama Lengkap & Gelar</th>
                     <th className="py-3 px-3">NIP</th>
@@ -1935,13 +2169,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                 <tbody className="divide-y divide-slate-200 font-sans">
                   {filteredTeachers.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-8 text-center text-slate-400">
+                      <td colSpan={isBulkMode('teachers') ? 9 : 8} className="py-8 text-center text-slate-400">
                         Tidak ada guru ditemukan dengan kriteria tersebut.
                       </td>
                     </tr>
                   ) : (
                     filteredTeachers.map((tch, idx) => (
                       <tr key={tch.id} className="hover:bg-slate-50/70 transition-colors">
+                        {isBulkMode('teachers') && <td className="px-3 py-3 text-center"><input type="checkbox" aria-label={`Pilih guru atau staf ${tch.fullName}`} checked={selectedBulkIds.has(tch.id)} onChange={() => toggleBulkItem(tch.id)} /></td>}
                         <td className="py-3 px-3 text-center font-mono text-slate-400">
                           {idx + 1}
                         </td>
@@ -2020,8 +2255,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                 className="w-full pl-9 pr-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-900 focus:outline-none"
               />
             </div>
-            <div className="text-xs text-slate-500">
-              Total {filteredApplicants.length} pendaftar PPDB daring terdata
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <span className="text-xs text-slate-500">Total {filteredApplicants.length} pendaftar PPDB daring terdata</span>
+              {bulkDeleteToolbar('ppdb', filteredApplicants.map(item => item.id), 'pendaftar PPDB')}
             </div>
           </div>
 
@@ -2031,6 +2267,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="bg-slate-50 text-slate-800 font-bold border-b border-slate-200">
+                      {isBulkMode('ppdb') && <th className="w-10 px-3 py-3 text-center"></th>}
                       <th className="py-3 px-3">No. Reg</th>
                       <th className="py-3 px-3">Nama Calon Siswa</th>
                       <th className="py-3 px-3">Jalur Pilihan</th>
@@ -2042,7 +2279,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                   <tbody className="divide-y divide-slate-200 font-sans">
                     {filteredApplicants.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="py-8 text-center text-slate-400">
+                        <td colSpan={isBulkMode('ppdb') ? 7 : 6} className="py-8 text-center text-slate-400">
                           Tidak ada pendaftar ditemukan.
                         </td>
                       </tr>
@@ -2061,6 +2298,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                               : 'hover:bg-slate-50'
                           }`}
                         >
+                          {isBulkMode('ppdb') && <td className="px-3 py-3 text-center" onClick={event => event.stopPropagation()}><input type="checkbox" aria-label={`Pilih pendaftar ${app.fullName}`} checked={selectedBulkIds.has(app.id)} onChange={() => toggleBulkItem(app.id)} /></td>}
                           <td className="py-3 px-3 font-mono font-bold text-blue-900">
                             {app.registrationNumber}
                           </td>
@@ -2234,13 +2472,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
               />
             </div>
 
-            <button
-              onClick={handleOpenAddAnnouncement}
-              className="px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-1.5 self-start sm:self-auto"
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span>Tambah Pengumuman Baru</span>
-            </button>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {bulkDeleteToolbar('announcements', filteredAnnouncements.map(item => item.id), 'pengumuman')}
+              <button
+                onClick={handleOpenAddAnnouncement}
+                className="px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-1.5 self-start sm:self-auto"
+              >
+                <PlusCircle className="w-4 h-4" />
+                <span>Tambah Pengumuman Baru</span>
+              </button>
+            </div>
           </div>
 
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
@@ -2248,6 +2489,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-slate-50 text-slate-800 font-bold border-b border-slate-200">
+                    {isBulkMode('announcements') && <th className="w-10 px-3 py-3 text-center"></th>}
                     <th className="py-3 px-3 w-10 text-center">No</th>
                     <th className="py-3 px-4 min-w-[240px]">Judul Pengumuman</th>
                     <th className="py-3 px-3">Kategori</th>
@@ -2259,13 +2501,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                 <tbody className="divide-y divide-slate-200 font-sans">
                   {filteredAnnouncements.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-slate-500">
+                      <td colSpan={isBulkMode('announcements') ? 7 : 6} className="py-8 text-center text-slate-500">
                         Tidak ada pengumuman ditemukan.
                       </td>
                     </tr>
                   ) : (
                     filteredAnnouncements.map((item, idx) => (
                       <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
+                        {isBulkMode('announcements') && <td className="px-3 py-3 text-center"><input type="checkbox" aria-label={`Pilih pengumuman ${item.title}`} checked={selectedBulkIds.has(item.id)} onChange={() => toggleBulkItem(item.id)} /></td>}
                         <td className="py-3 px-3 text-center font-mono text-slate-400">
                           {idx + 1}
                         </td>
@@ -2455,9 +2698,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
 
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
             <div className="p-5 border-b border-slate-200">
-              <h3 className="font-semibold text-slate-900">
-                Foto yang Sudah Diarsipkan ({galleryItems.length})
-              </h3>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h3 className="font-semibold text-slate-900">Foto yang Sudah Diarsipkan ({galleryItems.length})</h3>
+                {bulkDeleteToolbar('gallery', galleryItems.map(item => item.id), 'album galeri')}
+              </div>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-5">
               {galleryItems.map(item => (
@@ -2471,6 +2715,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                     <span className="absolute top-2 left-2 px-2 py-0.5 rounded text-[10px] font-bold bg-black/60 text-white">
                       {item.category}
                     </span>
+                    {isBulkMode('gallery') && <input type="checkbox" aria-label={`Pilih album ${item.title}`} checked={selectedBulkIds.has(item.id)} onChange={() => toggleBulkItem(item.id)} className="absolute right-2 top-2 h-4 w-4 rounded border-white shadow" />}
                   </div>
                   <div className="p-3 space-y-1">
                     <h4 className="text-xs font-semibold text-slate-800 line-clamp-2">{item.title}</h4>
@@ -2641,13 +2886,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
               />
             </div>
 
-            <button
-              onClick={handleOpenAddVideo}
-              className="px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-1.5 self-start sm:self-auto"
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span>Tambah Video YouTube Baru</span>
-            </button>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {bulkDeleteToolbar('videos', filteredVideos.map(item => item.id), 'video')}
+              <button
+                onClick={handleOpenAddVideo}
+                className="px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-1.5 self-start sm:self-auto"
+              >
+                <PlusCircle className="w-4 h-4" />
+                <span>Tambah Video YouTube Baru</span>
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -2657,7 +2905,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
               </div>
             ) : (
               filteredVideos.map(v => (
-                <div key={v.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col justify-between">
+                <div key={v.id} className="relative bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col justify-between">
+                  {isBulkMode('videos') && <input type="checkbox" aria-label={`Pilih video ${v.title}`} checked={selectedBulkIds.has(v.id)} onChange={() => toggleBulkItem(v.id)} className="absolute right-2 top-2 z-10 h-4 w-4 rounded border-white shadow" />}
                   <div>
                     <div className="relative aspect-video bg-slate-900 overflow-hidden group">
                       <img
@@ -2760,6 +3009,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
               ))}
             </div>
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+              {internalSubTab === 'pengumuman' && bulkDeleteToolbar('portalAnnouncements', filteredInternalAnnouncements.map(item => item.id), 'pengumuman internal')}
+              {internalSubTab === 'tugas' && bulkDeleteToolbar('assignments', filteredInternalAssignments.map(item => item.id), 'tugas')}
+              {internalSubTab === 'pengumpulan' && bulkDeleteToolbar('submissions', filteredInternalSubmissions.map(item => item.id), 'pengumpulan')}
               {internalSubTab === 'pengumuman' && (
                 <button
                   type="button"
@@ -2871,7 +3123,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
               )}
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 {filteredInternalAnnouncements.length ? filteredInternalAnnouncements.map(item => (
-                  <article key={item.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <article key={item.id} className="relative rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                    {isBulkMode('portalAnnouncements') && <input type="checkbox" aria-label={`Pilih pengumuman internal ${item.title}`} checked={selectedBulkIds.has(item.id)} onChange={() => toggleBulkItem(item.id)} className="absolute right-3 top-3 h-4 w-4" />}
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-900">{item.targetClass || item.category}</span>
                       <div className="flex items-center gap-2">
@@ -2908,7 +3161,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
           {internalSubTab === 'tugas' && (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               {filteredInternalAssignments.length ? filteredInternalAssignments.map(item => (
-                <article key={item.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <article key={item.id} className="relative rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                {isBulkMode('assignments') && <input type="checkbox" aria-label={`Pilih tugas ${item.title}`} checked={selectedBulkIds.has(item.id)} onChange={() => toggleBulkItem(item.id)} className="absolute right-3 top-3 h-4 w-4" />}
                   <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                     <span className="rounded-full bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-800">{item.className || item.classId}</span>
                     <span className="text-slate-500">Batas: {new Date(item.deadline).toLocaleString('id-ID')}</span>
@@ -2928,7 +3182,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                 const assignment = internalAssignments.find(task => task.id === item.assignmentId);
                 const isFile = item.submissionType === 'file' && item.linkOrContent.startsWith('/uploads/');
                 return (
-                  <article key={item.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-start sm:justify-between">
+                  <article key={item.id} className="relative flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-start sm:justify-between">
+                    {isBulkMode('submissions') && <input type="checkbox" aria-label={`Pilih pengumpulan ${item.studentName}`} checked={selectedBulkIds.has(item.id)} onChange={() => toggleBulkItem(item.id)} className="absolute right-3 top-3 h-4 w-4" />}
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="font-bold text-slate-900">{item.studentName}</h3>
@@ -3023,6 +3278,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
             )}
           </div>
 
+          <div className="flex justify-end">
+            {kombelSubTab === 'kegiatan'
+              ? bulkDeleteToolbar('kombelActivities', kombelActivities.map(item => item.id), 'kegiatan KOMBEL')
+              : bulkDeleteToolbar('kombelAgendas', kombelAgendas.map(item => item.id), 'agenda KOMBEL')}
+          </div>
+
           {kombelSubTab === 'kegiatan' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {kombelActivities.length === 0 ? (
@@ -3031,7 +3292,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                 </div>
               ) : (
                 kombelActivities.map(act => (
-                  <div key={act.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col justify-between">
+                  <div key={act.id} className="relative bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col justify-between">
+                    {isBulkMode('kombelActivities') && <input type="checkbox" aria-label={`Pilih kegiatan ${act.title}`} checked={selectedBulkIds.has(act.id)} onChange={() => toggleBulkItem(act.id)} className="absolute right-3 top-3 z-10 h-4 w-4 rounded border-white shadow" />}
                     <div>
                       {act.image && (
                         <div className="relative aspect-[16/9] bg-slate-100 overflow-hidden">
@@ -3088,7 +3350,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                 </div>
               ) : (
                 kombelAgendas.map(ag => (
-                  <div key={ag.id} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div key={ag.id} className="relative bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    {isBulkMode('kombelAgendas') && <input type="checkbox" aria-label={`Pilih agenda ${ag.title}`} checked={selectedBulkIds.has(ag.id)} onChange={() => toggleBulkItem(ag.id)} className="absolute right-3 top-3 h-4 w-4" />}
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-900">
@@ -3143,8 +3406,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                 className="w-full pl-9 pr-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-900 focus:outline-none"
               />
             </div>
-            <div className="text-xs text-slate-500">
-              {filteredMessages.length} pesan masuk dari masyarakat & wali murid
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <span className="text-xs text-slate-500">{filteredMessages.length} pesan masuk dari masyarakat & wali murid</span>
+              {bulkDeleteToolbar('messages', filteredMessages.map(item => item.id), 'pesan')}
             </div>
           </div>
 
@@ -3159,6 +3423,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                   <div key={msg.id} className="py-4 space-y-2">
                     <div className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2 flex-wrap">
+                        {isBulkMode('messages') && <input type="checkbox" aria-label={`Pilih pesan dari ${msg.name}`} checked={selectedBulkIds.has(msg.id)} onChange={() => toggleBulkItem(msg.id)} />}
                         <span className="font-bold text-slate-900">{msg.name}</span>
                         <span className="text-slate-400">·</span>
                         <span className="text-slate-500 font-mono">{msg.email}</span>
@@ -3485,9 +3750,53 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
               <h2 className="text-xl font-bold text-slate-900">Tempat Sampah</h2>
               <p className="mt-1 text-sm text-slate-600">Item yang dihapus disimpan di PostgreSQL. Pulihkan item untuk mengembalikannya atau hapus permanen jika sudah tidak diperlukan.</p>
             </div>
-            <button onClick={loadTrash} disabled={isLoadingTrash} className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60">
-              <RotateCcw className={`h-4 w-4 ${isLoadingTrash ? 'animate-spin' : ''}`} /> Muat Ulang
-            </button>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button
+                onClick={() => {
+                  setTrashBulkAction(current => current === 'restore' ? null : 'restore');
+                  setSelectedTrashIds(new Set());
+                }}
+                disabled={!trashItems.length || isLoadingTrash || isTrashActionInProgress}
+                className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${trashBulkAction === 'restore' ? 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50' : 'bg-emerald-700 text-white hover:bg-emerald-800'}`}
+              >
+                <RotateCcw className="h-4 w-4" /> {trashBulkAction === 'restore' ? 'Batal pilih' : 'Pilih untuk pulihkan'}
+              </button>
+              <button
+                onClick={() => {
+                  setTrashBulkAction(current => current === 'delete' ? null : 'delete');
+                  setSelectedTrashIds(new Set());
+                }}
+                disabled={!trashItems.length || isLoadingTrash || isTrashActionInProgress}
+                className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${trashBulkAction === 'delete' ? 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50' : 'bg-rose-700 text-white hover:bg-rose-800'}`}
+              >
+                <Trash2 className="h-4 w-4" /> {trashBulkAction === 'delete' ? 'Batal pilih' : 'Pilih untuk hapus'}
+              </button>
+              {trashBulkAction && (
+                <>
+                  <label className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700">
+                    <input
+                      type="checkbox"
+                      aria-label="Pilih semua item Tempat Sampah yang ditampilkan"
+                      checked={allTrashSelected}
+                      disabled={!visibleTrashIds.length || isTrashActionInProgress}
+                      onChange={event => setSelectedTrashIds(event.target.checked ? new Set(visibleTrashIds) : new Set())}
+                    />
+                    Pilih semua tampil
+                  </label>
+                  <button
+                    onClick={trashBulkAction === 'restore' ? handleRestoreSelectedTrashItems : handlePermanentlyDeleteSelectedTrashItems}
+                    disabled={!selectedTrashIds.size || isTrashActionInProgress}
+                    className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 ${trashBulkAction === 'restore' ? 'bg-emerald-700 hover:bg-emerald-800' : 'bg-rose-700 hover:bg-rose-800'}`}
+                  >
+                    {trashBulkAction === 'restore' ? <RotateCcw className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
+                    {trashBulkAction === 'restore' ? 'Pulihkan Terpilih' : 'Hapus Terpilih'} ({selectedTrashIds.size})
+                  </button>
+                </>
+              )}
+              <button onClick={loadTrash} disabled={isLoadingTrash || isTrashActionInProgress} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60">
+                <RotateCcw className={`h-4 w-4 ${isLoadingTrash ? 'animate-spin' : ''}`} /> Muat Ulang
+              </button>
+            </div>
           </div>
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             {isLoadingTrash ? (
@@ -3498,17 +3807,39 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[720px] text-left text-sm">
                   <thead className="bg-slate-50 text-xs uppercase text-slate-600">
-                    <tr><th className="px-4 py-3">Data</th><th className="px-4 py-3">Jenis</th><th className="px-4 py-3">Dihapus</th><th className="px-4 py-3 text-right">Tindakan</th></tr>
+                    <tr>
+                      {trashBulkAction && <th className="w-10 px-4 py-3"></th>}
+                      <th className="px-4 py-3">Data</th>
+                      <th className="px-4 py-3">Jenis</th>
+                      <th className="px-4 py-3">Dihapus</th>
+                      <th className="px-4 py-3 text-right">Tindakan</th>
+                    </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {trashItems.map(item => (
                       <tr key={item.id}>
+                        {trashBulkAction && (
+                          <td className="w-10 px-4 py-3 text-center">
+                            <input
+                              type="checkbox"
+                              aria-label={`Pilih ${item.label}`}
+                              checked={selectedTrashIds.has(item.id)}
+                              disabled={isTrashActionInProgress}
+                              onChange={() => setSelectedTrashIds(current => {
+                                const next = new Set(current);
+                                if (next.has(item.id)) next.delete(item.id);
+                                else next.add(item.id);
+                                return next;
+                              })}
+                            />
+                          </td>
+                        )}
                         <td className="px-4 py-3"><div className="font-semibold text-slate-900">{item.label}</div><div className="text-xs text-slate-500">{item.summary}</div></td>
                         <td className="px-4 py-3 text-xs text-slate-600">{item.type === 'uploaded_files' ? 'Berkas' : item.type}</td>
                         <td className="px-4 py-3 text-xs text-slate-600">{new Date(item.deletedAt).toLocaleString('id-ID')}</td>
                         <td className="px-4 py-3"><div className="flex justify-end gap-2">
-                          <button onClick={() => handleRestoreTrashItem(item)} className="rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-800">Pulihkan</button>
-                          <button onClick={() => handlePermanentlyDeleteTrashItem(item)} className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50">Hapus permanen</button>
+                          {!trashBulkAction && <button onClick={() => handleRestoreTrashItem(item)} disabled={isTrashActionInProgress} className="rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50">Pulihkan</button>}
+                          {!trashBulkAction && <button onClick={() => handlePermanentlyDeleteTrashItem(item)} disabled={isTrashActionInProgress} className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50">Hapus permanen</button>}
                         </div></td>
                       </tr>
                     ))}
@@ -3598,19 +3929,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                   <label className="text-xs font-medium text-slate-700">Kelas</label>
                   <select
                     value={studentForm.classId}
-                    onChange={e => {
-                      const val = e.target.value;
-                      setStudentForm({
-                        ...studentForm,
-                        classId: val,
-                        className: val === 'XII-MIPA-1' ? 'XII MIPA 1 (Sains Unggulan)' : 'XI IPS 2 (Sosial Humaniora)',
-                        major: val === 'XII-MIPA-1' ? 'MIPA' : 'IPS'
-                      });
-                    }}
+                    onChange={e => setStudentForm({
+                      ...studentForm,
+                      classId: e.target.value,
+                      className: e.target.value
+                    })}
                     className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-900 focus:outline-none bg-white"
                   >
-                    <option value="XII-MIPA-1">XII-MIPA-1 (Sains)</option>
-                    <option value="XI-IPS-2">XI-IPS-2 (Sosial)</option>
+                    {SCHOOL_CLASSES.map(classId => <option key={classId} value={classId}>{classId}</option>)}
                   </select>
                 </div>
               </div>

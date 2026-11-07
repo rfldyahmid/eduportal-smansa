@@ -10,6 +10,7 @@ import nodemailer from 'nodemailer';
 import type { Express } from 'express';
 import { getDb, saveDb, resetSchoolData } from './server/db';
 import { pool } from './server/pg';
+import { isSchoolClass, normalizeSchoolClassId } from './src/utils/schoolClasses';
 import { registerAnnouncementRoutes } from './server/routes/announcements';
 import { countAnnouncements, createAnnouncement } from './server/repositories/announcements';
 import {
@@ -372,27 +373,27 @@ app.get('/api/admin/trash', requireAdmin, async (_req, res) => {
   })));
 });
 
-app.post('/api/admin/trash/:id/restore', requireAdmin, async (req, res) => {
-  const { rows } = await pool.query<{ id: string; item_type: string; item_id: string; payload: Record<string, any> }>(
-    'SELECT id::text, item_type, item_id, payload FROM deleted_items WHERE id = $1', [req.params.id]
-  );
-  const entry = rows[0];
-  if (!entry) return res.status(404).json({ message: 'Item tempat sampah tidak ditemukan.' });
-
+async function restoreTrashEntry(id: string): Promise<{ status: number; message: string }> {
   try {
+    const { rows } = await pool.query<{ id: string; item_type: string; item_id: string; payload: Record<string, any> }>(
+      'SELECT id::text, item_type, item_id, payload FROM deleted_items WHERE id = $1', [id]
+    );
+    const entry = rows[0];
+    if (!entry) return { status: 404, message: 'Item tempat sampah tidak ditemukan.' };
+
     const entriesToRemove = [entry.id];
     if (entry.item_type === 'announcements') {
       const existing = await pool.query('SELECT 1 FROM announcements WHERE id = $1', [entry.item_id]);
-      if (existing.rowCount) return res.status(409).json({ message: 'Pengumuman dengan ID yang sama sudah ada; tidak ada data yang diubah.' });
+      if (existing.rowCount) return { status: 409, message: 'Pengumuman dengan ID yang sama sudah ada; tidak ada data yang diubah.' };
     } else if (entry.item_type !== 'uploaded_files') {
       const allowedCollections = new Set([
         'users', 'students', 'teachers', 'schedules', 'ppdb', 'messages', 'gallery', 'videos',
         'kombelActivities', 'kombelAgendas', 'assignments', 'submissions', 'portalAnnouncements'
       ]);
-      if (!allowedCollections.has(entry.item_type)) return res.status(400).json({ message: 'Jenis item ini belum dapat dipulihkan.' });
+      if (!allowedCollections.has(entry.item_type)) return { status: 400, message: 'Jenis item ini belum dapat dipulihkan.' };
       const currentDb = await getDb();
       if ((currentDb as any)[entry.item_type].some((item: any) => item.id === entry.item_id)) {
-        return res.status(409).json({ message: 'Item dengan ID yang sama sudah ada. Tidak ada data yang diubah.' });
+        return { status: 409, message: 'Item dengan ID yang sama sudah ada. Tidak ada data yang diubah.' };
       }
     }
 
@@ -443,11 +444,11 @@ app.post('/api/admin/trash/:id/restore', requireAdmin, async (req, res) => {
         'users', 'students', 'teachers', 'schedules', 'ppdb', 'messages', 'gallery', 'videos',
         'kombelActivities', 'kombelAgendas', 'assignments', 'submissions', 'portalAnnouncements'
       ]);
-      if (!collectionKeys.has(entry.item_type)) return res.status(400).json({ message: 'Jenis item ini belum dapat dipulihkan.' });
+      if (!collectionKeys.has(entry.item_type)) return { status: 400, message: 'Jenis item ini belum dapat dipulihkan.' };
       const db = await getDb();
       const collection = (db as any)[entry.item_type];
       if (collection.some((item: any) => item.id === entry.item_id)) {
-        return res.status(409).json({ message: 'Item dengan ID yang sama sudah ada. Tidak dipulihkan agar data tidak tertimpa.' });
+        return { status: 409, message: 'Item dengan ID yang sama sudah ada. Tidak dipulihkan agar data tidak tertimpa.' };
       }
       collection.push(entry.payload);
       let relatedCondition: string | null = null;
@@ -479,10 +480,89 @@ app.post('/api/admin/trash/:id/restore', requireAdmin, async (req, res) => {
     }
 
     await pool.query('DELETE FROM deleted_items WHERE id = ANY($1::bigint[])', [entriesToRemove]);
-    res.json({ message: 'Item berhasil dipulihkan.' });
+    return { status: 200, message: 'Item berhasil dipulihkan.' };
   } catch (error) {
     console.error('[trash-restore]', error instanceof Error ? error.message : error);
-    res.status(500).json({ message: 'Pemulihan gagal. Periksa apakah data atau ID terkait sudah digunakan.' });
+    return { status: 500, message: 'Pemulihan gagal. Periksa apakah data atau ID terkait sudah digunakan.' };
+  }
+}
+
+app.post('/api/admin/trash/:id/restore', requireAdmin, async (req, res) => {
+  const result = await restoreTrashEntry(String(req.params.id));
+  res.status(result.status).json({ message: result.message });
+});
+
+app.post('/api/admin/trash/restore-selected', requireAdmin, async (req, res) => {
+  const requestedIds: unknown[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  const ids = [...new Set(requestedIds.filter((id): id is string =>
+    typeof id === 'string' && /^[1-9]\d*$/.test(id)
+  ))];
+  if (!ids.length || ids.length > 500 || ids.length !== requestedIds.length) {
+    return res.status(400).json({ message: 'Pilih 1 sampai 500 item Tempat Sampah yang valid untuk dipulihkan.' });
+  }
+
+  try {
+    const { rows } = await pool.query<{ id: string }>(
+      'SELECT id::text FROM deleted_items WHERE id = ANY($1::bigint[]) ORDER BY deleted_at ASC, id ASC',
+      [ids]
+    );
+    for (const entry of rows) {
+      await restoreTrashEntry(entry.id);
+    }
+
+    const { rows: finalRows } = await pool.query<{ id: string }>(
+      'SELECT id::text FROM deleted_items WHERE id = ANY($1::bigint[])',
+      [ids]
+    );
+    const finalIds = new Set(finalRows.map(row => row.id));
+    const skippedCount = finalIds.size;
+    const restoredCount = ids.length - skippedCount;
+    res.json({
+      message: skippedCount
+        ? `${restoredCount} item berhasil dipulihkan. ${skippedCount} item tidak dipulihkan karena konflik atau jenisnya belum didukung.`
+        : `${restoredCount} item berhasil dipulihkan.`,
+      restoredCount,
+      skippedCount
+    });
+  } catch (error) {
+    console.error('[trash-restore-selected]', error instanceof Error ? error.message : error);
+    res.status(500).json({ message: 'Pemulihan item terpilih gagal. Periksa koneksi PostgreSQL dan log server.' });
+  }
+});
+
+app.delete('/api/admin/trash/bulk', requireAdmin, async (req, res) => {
+  const requestedIds: unknown[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  const ids = [...new Set(requestedIds.filter((id): id is string =>
+    typeof id === 'string' && /^[1-9]\d*$/.test(id)
+  ))];
+  if (!ids.length || ids.length > 500 || ids.length !== requestedIds.length) {
+    return res.status(400).json({ message: 'Pilih 1 sampai 500 item Tempat Sampah yang valid.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query<{ id: string }>(
+      'SELECT id::text FROM deleted_items WHERE id = ANY($1::bigint[]) FOR UPDATE',
+      [ids]
+    );
+    if (rows.length !== ids.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Sebagian item tidak ditemukan. Muat ulang Tempat Sampah dan coba lagi.' });
+    }
+
+    await client.query('DELETE FROM deleted_items WHERE id = ANY($1::bigint[])', [ids]);
+    await client.query('COMMIT');
+    res.json({
+      message: `${rows.length} item dihapus permanen dari Tempat Sampah.`,
+      removedCount: rows.length
+    });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    console.error('[trash-bulk-delete]', error instanceof Error ? error.message : error);
+    res.status(500).json({ message: 'Gagal menghapus item terpilih. Periksa koneksi PostgreSQL dan log server.' });
+  } finally {
+    client.release();
   }
 });
 
@@ -850,6 +930,133 @@ app.delete('/api/users', requireAdmin, async (req: AuthenticatedRequest, res) =>
   res.json({
     message: `${selected.length} akun dipindahkan ke Tempat Sampah dan dapat dipulihkan.`,
     removedCount: selected.length
+  });
+});
+
+app.post('/api/admin/bulk-delete', requireAdmin, async (req, res) => {
+  const allowedCollections = new Set([
+    'students', 'teachers', 'ppdb', 'gallery', 'videos', 'kombelActivities',
+    'kombelAgendas', 'messages', 'assignments', 'submissions', 'portalAnnouncements'
+  ]);
+  const collection = req.body?.collection;
+  const ids = Array.isArray(req.body?.ids)
+    ? [...new Set(req.body.ids.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0))]
+    : [];
+  if (typeof collection !== 'string' || !allowedCollections.has(collection)) {
+    return res.status(400).json({ message: 'Jenis data yang dipilih tidak didukung untuk hapus massal.' });
+  }
+  if (!ids.length || ids.length > 500) {
+    return res.status(400).json({ message: 'Pilih 1 sampai 500 data untuk dihapus.' });
+  }
+
+  const db = await getDb();
+  const selectedIds = new Set(ids);
+  const filesToDelete: string[] = [];
+  let removedCount = 0;
+
+  switch (collection) {
+    case 'students': {
+      const selected = db.students.filter(item => selectedIds.has(item.id));
+      if (selected.length !== ids.length) return res.status(404).json({ message: 'Sebagian data siswa tidak ditemukan. Muat ulang daftar dan coba lagi.' });
+      const usernames = new Set(selected.map(item => item.nisn));
+      const linkedIds = new Set(selected.map(item => item.id));
+      db.students = db.students.filter(item => !selectedIds.has(item.id));
+      db.users = db.users.filter(user => !linkedIds.has(user.linkedId || '') && !usernames.has(user.username));
+      removedCount = selected.length;
+      break;
+    }
+    case 'teachers': {
+      const selected = db.teachers.filter(item => selectedIds.has(item.id));
+      if (selected.length !== ids.length) return res.status(404).json({ message: 'Sebagian data guru/staf tidak ditemukan. Muat ulang daftar dan coba lagi.' });
+      const nips = new Set(selected.map(item => item.nip));
+      const linkedIds = new Set(selected.map(item => item.id));
+      db.teachers = db.teachers.filter(item => !selectedIds.has(item.id));
+      db.users = db.users.filter(user => !linkedIds.has(user.linkedId || '') && !nips.has(user.username));
+      filesToDelete.push(...selected.map(item => item.photoUrl));
+      removedCount = selected.length;
+      break;
+    }
+    case 'ppdb': {
+      if (!db.ppdb.some(item => selectedIds.has(item.id)) || db.ppdb.filter(item => selectedIds.has(item.id)).length !== ids.length) {
+        return res.status(404).json({ message: 'Sebagian data PPDB tidak ditemukan. Muat ulang daftar dan coba lagi.' });
+      }
+      db.ppdb = db.ppdb.filter(item => !selectedIds.has(item.id));
+      removedCount = ids.length;
+      break;
+    }
+    case 'gallery': {
+      const selected = db.gallery.filter(item => selectedIds.has(item.id));
+      if (selected.length !== ids.length) return res.status(404).json({ message: 'Sebagian album galeri tidak ditemukan. Muat ulang daftar dan coba lagi.' });
+      db.gallery = db.gallery.filter(item => !selectedIds.has(item.id));
+      for (const item of selected) filesToDelete.push(item.image, ...(item.additionalImages || []));
+      removedCount = selected.length;
+      break;
+    }
+    case 'videos': {
+      const count = db.videos.filter(item => selectedIds.has(item.id)).length;
+      if (count !== ids.length) return res.status(404).json({ message: 'Sebagian video tidak ditemukan. Muat ulang daftar dan coba lagi.' });
+      db.videos = db.videos.filter(item => !selectedIds.has(item.id));
+      removedCount = count;
+      break;
+    }
+    case 'kombelActivities': {
+      const selected = db.kombelActivities.filter(item => selectedIds.has(item.id));
+      if (selected.length !== ids.length) return res.status(404).json({ message: 'Sebagian kegiatan KOMBEL tidak ditemukan. Muat ulang daftar dan coba lagi.' });
+      db.kombelActivities = db.kombelActivities.filter(item => !selectedIds.has(item.id));
+      for (const item of selected) filesToDelete.push(item.image, ...(item.additionalImages || []));
+      removedCount = selected.length;
+      break;
+    }
+    case 'kombelAgendas': {
+      const count = db.kombelAgendas.filter(item => selectedIds.has(item.id)).length;
+      if (count !== ids.length) return res.status(404).json({ message: 'Sebagian agenda KOMBEL tidak ditemukan. Muat ulang daftar dan coba lagi.' });
+      db.kombelAgendas = db.kombelAgendas.filter(item => !selectedIds.has(item.id));
+      removedCount = count;
+      break;
+    }
+    case 'messages': {
+      const count = db.messages.filter(item => selectedIds.has(item.id)).length;
+      if (count !== ids.length) return res.status(404).json({ message: 'Sebagian pesan tidak ditemukan. Muat ulang daftar dan coba lagi.' });
+      db.messages = db.messages.filter(item => !selectedIds.has(item.id));
+      removedCount = count;
+      break;
+    }
+    case 'assignments': {
+      const count = db.assignments.filter(item => selectedIds.has(item.id)).length;
+      if (count !== ids.length) return res.status(404).json({ message: 'Sebagian tugas tidak ditemukan. Muat ulang daftar dan coba lagi.' });
+      const selectedSubmissions = db.submissions.filter(item => selectedIds.has(item.assignmentId));
+      filesToDelete.push(...selectedSubmissions
+        .filter(item => item.submissionType === 'file')
+        .map(item => item.linkOrContent));
+      db.assignments = db.assignments.filter(item => !selectedIds.has(item.id));
+      db.submissions = db.submissions.filter(item => !selectedIds.has(item.assignmentId));
+      removedCount = count;
+      break;
+    }
+    case 'submissions': {
+      const selected = db.submissions.filter(item => selectedIds.has(item.id));
+      if (selected.length !== ids.length) return res.status(404).json({ message: 'Sebagian pengumpulan tidak ditemukan. Muat ulang daftar dan coba lagi.' });
+      filesToDelete.push(...selected
+        .filter(item => item.submissionType === 'file')
+        .map(item => item.linkOrContent));
+      db.submissions = db.submissions.filter(item => !selectedIds.has(item.id));
+      removedCount = selected.length;
+      break;
+    }
+    case 'portalAnnouncements': {
+      const count = db.portalAnnouncements.filter(item => selectedIds.has(item.id)).length;
+      if (count !== ids.length) return res.status(404).json({ message: 'Sebagian pengumuman internal tidak ditemukan. Muat ulang daftar dan coba lagi.' });
+      db.portalAnnouncements = db.portalAnnouncements.filter(item => !selectedIds.has(item.id));
+      removedCount = count;
+      break;
+    }
+  }
+
+  await saveDb();
+  for (const file of filesToDelete) await safeDeleteImage(file);
+  res.json({
+    message: `${removedCount} data dipindahkan ke Tempat Sampah dan dapat dipulihkan.`,
+    removedCount
   });
 });
 
@@ -1336,6 +1543,203 @@ app.get('/api/teachers', async (_req, res) => {
   res.json(db.teachers);
 });
 
+app.post('/api/admin/roster/import', requireAdmin, async (req, res) => {
+  const studentRows = req.body?.students;
+  const teacherRows = req.body?.teachers;
+  if (!Array.isArray(studentRows) || !Array.isArray(teacherRows) || studentRows.length + teacherRows.length === 0) {
+    return res.status(400).json({ message: 'Data siswa dan guru/staf dari Excel tidak valid atau kosong.' });
+  }
+  if (studentRows.length > 10000 || teacherRows.length > 10000 || studentRows.length + teacherRows.length > 10000) {
+    return res.status(400).json({ message: 'Impor maksimal 10.000 baris dalam satu file.' });
+  }
+
+  const db = await getDb();
+  const nextStudents = db.students.map(item => ({ ...item }));
+  const nextTeachers = db.teachers.map(item => ({ ...item, classesTaught: [...(item.classesTaught || [])] }));
+  const errors: string[] = [];
+  const studentSeen = new Set<string>();
+  const teacherSeen = new Set<string>();
+  const studentCounts = { created: 0, updated: 0 };
+  const teacherCounts = { created: 0, updated: 0 };
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const departments = ['MIPA', 'Bahasa', 'IPS', 'Seni & Olahraga', 'BK', 'Informatika'];
+
+  for (const [index, raw] of studentRows.entries()) {
+    const row = raw && typeof raw === 'object' ? raw : {};
+    const sourceRow = Number.isInteger(row.sourceRow) ? row.sourceRow : index + 2;
+    const nisn = String(row.nisn || '').trim();
+    const fullName = String(row.fullName || '').trim();
+    const email = String(row.email || '').trim();
+    const genderInput = String(row.gender || '').trim().toLowerCase();
+    const gender = ['l', 'lk', 'laki-laki', 'laki laki', 'male'].includes(genderInput)
+      ? 'Laki-laki'
+      : ['p', 'pr', 'perempuan', 'female'].includes(genderInput)
+        ? 'Perempuan'
+        : null;
+    const classId = normalizeSchoolClassId(String(row.classId || '').trim());
+    if (!nisn || !fullName || !emailPattern.test(email) || !gender || !isSchoolClass(classId)) {
+      errors.push(`Sheet Siswa baris ${sourceRow}: NISN, nama, email valid, jenis kelamin, atau kelas tidak valid.`);
+      continue;
+    }
+    if (studentSeen.has(nisn)) {
+      errors.push(`Sheet Siswa baris ${sourceRow}: NISN ${nisn} muncul lebih dari sekali di file.`);
+      continue;
+    }
+    studentSeen.add(nisn);
+    const existing = nextStudents.find(item => item.nisn === nisn);
+    const linkedUser = db.users.find(user => user.username === nisn || (existing && user.linkedId === existing.id));
+    if (linkedUser && linkedUser.role !== 'siswa') {
+      errors.push(`Sheet Siswa baris ${sourceRow}: NISN ${nisn} sudah digunakan akun dengan peran lain.`);
+      continue;
+    }
+    if (linkedUser && existing && linkedUser.linkedId && linkedUser.linkedId !== existing.id) {
+      errors.push(`Sheet Siswa baris ${sourceRow}: NISN ${nisn} sudah digunakan akun lain.`);
+      continue;
+    }
+    if (linkedUser && !existing) {
+      errors.push(`Sheet Siswa baris ${sourceRow}: NISN ${nisn} sudah digunakan akun tanpa profil siswa.`);
+      continue;
+    }
+
+    const item: Student = {
+      id: existing?.id || `std-${crypto.randomUUID()}`,
+      nisn,
+      nis: String(row.nis || '').trim() || existing?.nis || nisn.slice(-5),
+      fullName,
+      email,
+      gender,
+      classId,
+      className: classId,
+      academicYear: String(row.academicYear || '').trim() || existing?.academicYear || '2026/2027',
+      homeroomTeacher: String(row.homeroomTeacher || '').trim() || existing?.homeroomTeacher || '-'
+    };
+    if (existing) {
+      nextStudents[nextStudents.indexOf(existing)] = item;
+      studentCounts.updated += 1;
+    } else {
+      nextStudents.push(item);
+      studentCounts.created += 1;
+    }
+  }
+
+  for (const [index, raw] of teacherRows.entries()) {
+    const row = raw && typeof raw === 'object' ? raw : {};
+    const sourceRow = Number.isInteger(row.sourceRow) ? row.sourceRow : index + 2;
+    const nip = String(row.nip || '').replace(/\s+/g, '');
+    const fullName = String(row.fullName || '').trim();
+    const subject = String(row.subject || '').trim();
+    const email = String(row.email || '').trim();
+    const department = String(row.department || '').trim();
+    const classesRaw: unknown[] = Array.isArray(row.classesTaught) ? row.classesTaught : [];
+    const classesTaught: string[] = classesRaw.map((value: unknown): string =>
+      normalizeSchoolClassId(String(value || '').trim())
+    );
+    const homeroomInput = String(row.homeroomClass || '').trim();
+    const homeroomClass = homeroomInput ? normalizeSchoolClassId(homeroomInput) : '';
+    if (
+      !nip || !fullName || !subject || !emailPattern.test(email) ||
+      !departments.includes(department) ||
+      classesTaught.some((classId: string) => !isSchoolClass(classId)) ||
+      (homeroomClass && !isSchoolClass(homeroomClass))
+    ) {
+      errors.push(`Sheet Guru & Staff baris ${sourceRow}: NIP, nama, mata pelajaran/jabatan, email, departemen, atau kelas tidak valid.`);
+      continue;
+    }
+    if (teacherSeen.has(nip)) {
+      errors.push(`Sheet Guru & Staff baris ${sourceRow}: NIP ${nip} muncul lebih dari sekali di file.`);
+      continue;
+    }
+    teacherSeen.add(nip);
+    const existing = nextTeachers.find(item => item.nip === nip);
+    const linkedUser = db.users.find(user => user.username === nip || (existing && user.linkedId === existing.id));
+    if (linkedUser && !['guru', 'kepala_sekolah', 'ketua_kombel'].includes(linkedUser.role)) {
+      errors.push(`Sheet Guru & Staff baris ${sourceRow}: NIP ${nip} sudah digunakan akun dengan peran lain.`);
+      continue;
+    }
+    if (linkedUser && existing && linkedUser.linkedId && linkedUser.linkedId !== existing.id) {
+      errors.push(`Sheet Guru & Staff baris ${sourceRow}: NIP ${nip} sudah digunakan akun lain.`);
+      continue;
+    }
+    if (linkedUser && !existing) {
+      errors.push(`Sheet Guru & Staff baris ${sourceRow}: NIP ${nip} sudah digunakan akun tanpa profil guru/staf.`);
+      continue;
+    }
+
+    const item: Teacher = {
+      id: existing?.id || `tch-${crypto.randomUUID()}`,
+      nip,
+      fullName,
+      degree: String(row.degree || '').trim() || existing?.degree || '',
+      subject,
+      department: department as Teacher['department'],
+      classesTaught: [...new Set(classesTaught.length ? classesTaught : existing?.classesTaught || [])],
+      homeroomClass: homeroomClass || existing?.homeroomClass || '',
+      education: String(row.education || '').trim() || existing?.education || '',
+      email,
+      phone: String(row.phone || '').trim() || existing?.phone || '-',
+      photoUrl: existing?.photoUrl || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=400',
+      bio: String(row.bio || '').trim() || existing?.bio || ''
+    };
+    if (existing) {
+      nextTeachers[nextTeachers.indexOf(existing)] = item;
+      teacherCounts.updated += 1;
+    } else {
+      nextTeachers.push(item);
+      teacherCounts.created += 1;
+    }
+  }
+
+  const importedTeacherIds = new Set(teacherRows.map((row: any) => {
+    const nip = String(row?.nip || '').replace(/\s+/g, '');
+    return nextTeachers.find(teacher => teacher.nip === nip)?.id;
+  }).filter(Boolean));
+  const homeroomOwners = new Map<string, { id: string; name: string }>();
+  for (const teacher of nextTeachers) {
+    if (!teacher.homeroomClass) continue;
+    const owner = homeroomOwners.get(teacher.homeroomClass);
+    if (owner && (importedTeacherIds.has(owner.id) || importedTeacherIds.has(teacher.id))) {
+      errors.push(`Kelas wali ${teacher.homeroomClass} ditetapkan ke lebih dari satu guru/staf (${owner.name} dan ${teacher.fullName}).`);
+    } else if (!owner) {
+      homeroomOwners.set(teacher.homeroomClass, { id: teacher.id, name: teacher.fullName });
+    }
+  }
+
+  if (errors.length) {
+    return res.status(400).json({
+      message: `Impor dibatalkan karena ada ${errors.length} kesalahan. Tidak ada data yang diubah. ${errors.slice(0, 10).join(' ')}${errors.length > 10 ? ' Perbaiki kesalahan lainnya pada file.' : ''}`
+    });
+  }
+
+  db.students = nextStudents;
+  db.teachers = nextTeachers;
+  for (const student of nextStudents.filter(item => studentSeen.has(item.nisn))) {
+    const user = db.users.find(item =>
+      item.role === 'siswa' && (item.linkedId === student.id || item.username === student.nisn)
+    );
+    if (user) {
+      user.fullName = student.fullName;
+      user.email = String(student.email || '');
+    }
+  }
+  for (const teacher of nextTeachers.filter(item => teacherSeen.has(item.nip))) {
+    const user = db.users.find(item =>
+      ['guru', 'kepala_sekolah', 'ketua_kombel'].includes(item.role) &&
+      (item.linkedId === teacher.id || item.username === teacher.nip)
+    );
+    if (user) {
+      user.fullName = teacher.fullName;
+      user.email = teacher.email;
+    }
+  }
+
+  await saveDb();
+  res.json({
+    message: 'Sinkronisasi data siswa dan guru/staf berhasil.',
+    students: studentCounts,
+    teachers: teacherCounts
+  });
+});
+
 app.post('/api/teachers', requireAdmin, async (req, res) => {
   try {
     const body = req.body || {};
@@ -1364,7 +1768,7 @@ app.post('/api/teachers', requireAdmin, async (req, res) => {
       degree: String(body.degree || '').trim(),
       subject: String(body.subject).trim(),
       department: body.department || 'MIPA',
-      classesTaught: Array.isArray(body.classesTaught) ? body.classesTaught : ['X-1'],
+      classesTaught: Array.isArray(body.classesTaught) ? body.classesTaught : ['X-A'],
       homeroomClass,
       education: String(body.education || '').trim(),
       email: String(body.email || '').trim(),
@@ -1526,6 +1930,10 @@ app.post('/api/students', requireAdmin, async (req, res) => {
       return res.status(400).json({ message: 'Email aktif siswa atau orang tua/wali wajib diisi agar pemulihan kata sandi dapat digunakan.' });
     }
     const db = await getDb();
+    const classId = normalizeSchoolClassId(String(body.classId || 'X-A'));
+    if (!isSchoolClass(classId)) {
+      return res.status(400).json({ message: 'Kelas harus salah satu dari X-A sampai XII-E.' });
+    }
     const nisn = String(body.nisn).trim();
     if (db.students.some(student => student.nisn === nisn) || db.users.some(user => user.username === nisn)) {
       return res.status(409).json({ message: 'NISN tersebut sudah terdaftar.' });
@@ -1537,9 +1945,8 @@ app.post('/api/students', requireAdmin, async (req, res) => {
       fullName: String(body.fullName).trim(),
       email: String(body.email || '').trim(),
       gender: body.gender || 'Laki-laki',
-      classId: body.classId || 'X-1',
-      className: body.className || body.classId || 'X-1',
-      major: body.major || 'MIPA',
+      classId,
+      className: classId,
       academicYear: body.academicYear || '2026/2027',
       homeroomTeacher: body.homeroomTeacher || 'Dra. Sri Wahyuni, M.Si'
     };
@@ -1578,7 +1985,19 @@ app.put('/api/students/:id', requireAdmin, async (req, res) => {
   if (req.body?.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(req.body.email).trim())) {
     return res.status(400).json({ message: 'Format email siswa tidak valid.' });
   }
-  db.students[index] = { ...db.students[index], ...req.body, id: db.students[index].id };
+  const classId = normalizeSchoolClassId(String(req.body?.classId || db.students[index].classId));
+  if (!isSchoolClass(classId)) {
+    return res.status(400).json({ message: 'Kelas harus salah satu dari X-A sampai XII-E.' });
+  }
+  const { major: _legacyMajor, ...existingStudent } = db.students[index] as Student & { major?: unknown };
+  const { major: _submittedMajor, ...studentUpdates } = req.body || {};
+  db.students[index] = {
+    ...existingStudent,
+    ...studentUpdates,
+    id: db.students[index].id,
+    classId,
+    className: classId
+  };
   const user = db.users.find(u => u.linkedId === req.params.id || u.username === db.students[index].nisn);
   if (user) {
     user.fullName = db.students[index].fullName;

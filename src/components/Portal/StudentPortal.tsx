@@ -52,7 +52,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ currentUser, onLog
   // Empty values keep derived views safe while the authenticated profile is loading.
   const student: Student = studentProfile || {
     id: '', nisn: '', nis: '', fullName: '', email: '', gender: 'Laki-laki',
-    classId: '', className: '', major: 'Fase E (Umum)', academicYear: '', homeroomTeacher: ''
+    classId: '', className: '', academicYear: '', homeroomTeacher: ''
   };
 
   const [activeTab, setActiveTab] = useState<'dashboard' | 'jadwal' | 'tugas' | 'pengumuman'>('dashboard');

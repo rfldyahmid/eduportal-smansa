@@ -107,7 +107,7 @@ export const PrintScheduleModal: React.FC<PrintScheduleModalProps> = ({
                 <span className="text-slate-800">{student.nisn} / {student.nis}</span>
               </div>
               <div>
-                <span className="text-slate-500 w-32 inline-block">Kelas / Jurusan:</span>
+                <span className="text-slate-500 w-32 inline-block">Kelas:</span>
                 <span className="text-slate-800 font-sans font-semibold">{student.className}</span>
               </div>
             </div>

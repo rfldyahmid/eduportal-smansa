@@ -20,9 +20,8 @@ export interface Student {
   fullName: string;
   email?: string;
   gender: 'Laki-laki' | 'Perempuan';
-  classId: string; // e.g. "XII-MIPA-1", "XI-IPS-2", "X-1"
+  classId: string; // e.g. "X-A", "XI-B", "XII-E"
   className: string;
-  major: 'MIPA' | 'IPS' | 'Fase E (Umum)';
   academicYear: string;
   homeroomTeacher: string;
 }
@@ -135,7 +134,7 @@ export interface SubjectAnnouncement {
   teacherId: string;
   teacherName: string;
   subject: string;
-  classId: string; // e.g. "XII-MIPA-1", "XI-IPS-2", or "Semua Kelas"
+  classId: string; // e.g. "XII-A", "XI-B", or "Semua Kelas"
   className: string;
   title: string;
   type: 'Guru Berhalangan & Tugas Pengganti' | 'Instruksi Materi' | 'Perubahan Jadwal Mapel' | 'Info Ulangan / Praktikum';

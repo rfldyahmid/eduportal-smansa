@@ -2,6 +2,8 @@
 
 Dokumen ini mencatat audit, konfigurasi, dan batasan migrasi PostgreSQL. Runtime menggunakan PostgreSQL: endpoint aplikasi membaca/menulis state melalui `server/db.ts`, sedangkan pengumuman publik memakai tabel relasional. File `server/migrations/001_initial_schema.sql` adalah skema awal; migrator memeriksa versi dan hanya menerapkan migrasi yang belum tercatat.
 
+Migrasi versi 8 mengubah label kelas lama bernomor 1–5 menjadi A–E pada tabel relasional dan menghapus kolom jurusan siswa/kelas. Saat runtime memuat state JSONB lama, referensi kelas pada profil, kelas guru, jadwal, tugas, pengumpulan, dan sasaran pengumuman dinormalisasi ke format yang sama. `npm run db:migrate` menerapkan migrasi SQL ini secara berurutan; tidak perlu mengedit data JSON secara manual.
+
 ## Status aktual lingkungan lokal (21 Oktober 2026)
 
 - Service PostgreSQL lokal `postgresql-x64-18` berjalan dan koneksi melalui `DATABASE_URL` pada `.env` berhasil diuji. Nilai `.env` tidak dicatat di dokumen ini.

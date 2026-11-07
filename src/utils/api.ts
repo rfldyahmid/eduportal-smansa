@@ -18,6 +18,7 @@ import {
   UserAccount,
   UserRole
 } from '../types';
+import type { StudentImportRow, TeacherImportRow } from './rosterExcel';
 
 const API_BASE = '/api';
 const AUTH_TOKEN_KEY = 'sman1halteng_auth_token';
@@ -145,6 +146,40 @@ export async function bulkDeleteManagedUsers(ids: string[]): Promise<{ message: 
   return apiRequest('/users', { method: 'DELETE', body: JSON.stringify({ ids }) });
 }
 
+export type BulkDeleteCollection =
+  | 'students'
+  | 'teachers'
+  | 'ppdb'
+  | 'announcements'
+  | 'gallery'
+  | 'videos'
+  | 'kombelActivities'
+  | 'kombelAgendas'
+  | 'messages'
+  | 'assignments'
+  | 'submissions'
+  | 'portalAnnouncements';
+
+export async function bulkDeleteAdminItems(
+  collection: BulkDeleteCollection,
+  ids: string[]
+): Promise<{ message: string; removedCount: number }> {
+  return apiRequest(collection === 'announcements' ? '/announcements/bulk-delete' : '/admin/bulk-delete', {
+    method: 'POST',
+    body: JSON.stringify({ collection, ids })
+  });
+}
+
+export async function syncAdminRoster(payload: {
+  students: StudentImportRow[];
+  teachers: TeacherImportRow[];
+}): Promise<{ message: string; students: { created: number; updated: number }; teachers: { created: number; updated: number } }> {
+  return apiRequest('/admin/roster/import', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
 export interface ProvisionLinkedAccountsResult {
   created: { fullName: string; role: 'siswa' | 'guru'; username: string; temporaryPassword: string }[];
   conflicts: { fullName: string; role: 'siswa' | 'guru'; username: string }[];
@@ -169,8 +204,39 @@ export async function restoreTrashItem(id: string): Promise<{ message: string }>
   return apiRequest(`/admin/trash/${encodeURIComponent(id)}/restore`, { method: 'POST', body: '{}' });
 }
 
+export async function restoreSelectedTrashItems(ids: string[]): Promise<{
+  message: string;
+  restoredCount: number;
+  skippedCount: number;
+}> {
+  let restoredCount = 0;
+  let skippedCount = 0;
+  for (let index = 0; index < ids.length; index += 500) {
+    const result = await apiRequest<{ message: string; restoredCount: number; skippedCount: number }>(
+      '/admin/trash/restore-selected',
+      { method: 'POST', body: JSON.stringify({ ids: ids.slice(index, index + 500) }) }
+    );
+    restoredCount += result.restoredCount;
+    skippedCount += result.skippedCount;
+  }
+  return {
+    message: skippedCount
+      ? `${restoredCount} item berhasil dipulihkan. ${skippedCount} item tidak dipulihkan karena konflik atau jenisnya belum didukung.`
+      : `${restoredCount} item berhasil dipulihkan.`,
+    restoredCount,
+    skippedCount
+  };
+}
+
 export async function permanentlyDeleteTrashItem(id: string): Promise<void> {
   await apiRequest(`/admin/trash/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export async function permanentlyDeleteSelectedTrashItems(ids: string[]): Promise<{ message: string; removedCount: number }> {
+  return apiRequest('/admin/trash/bulk', {
+    method: 'DELETE',
+    body: JSON.stringify({ ids })
+  });
 }
 
 export async function provisionLinkedAccounts(): Promise<ProvisionLinkedAccountsResult> {

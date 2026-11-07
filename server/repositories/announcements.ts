@@ -188,3 +188,18 @@ export async function deleteAnnouncement(id: string): Promise<boolean> {
   const res = await pool.query('DELETE FROM announcements WHERE id = $1', [id]);
   return (res.rowCount ?? 0) > 0;
 }
+
+export async function deleteAnnouncements(ids: string[]): Promise<Announcement[]> {
+  return inTransaction(async client => {
+    const { rows } = await client.query<Row>(`
+      ${SELECT_SQL}
+      WHERE a.id = ANY($1::text[])
+      GROUP BY a.id
+    `, [ids]);
+    if (rows.length !== ids.length) {
+      throw new ValidationError('Sebagian pengumuman yang dipilih sudah tidak tersedia. Muat ulang daftar dan coba lagi.');
+    }
+    await client.query('DELETE FROM announcements WHERE id = ANY($1::text[])', [ids]);
+    return rows.map(toAnnouncement);
+  });
+}

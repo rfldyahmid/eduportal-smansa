@@ -1,8 +1,20 @@
 # EDUPORTAL — SMA Negeri 1 Halmahera Tengah
 
+## Kelas siswa
+
+Data siswa menggunakan kelas tanpa jurusan: X-A sampai X-E, XI-A sampai XI-E, dan XII-A sampai XII-E. Kelas lama yang memiliki nomor rombel 1–5 dipetakan ke A–E saat data dimuat; jadwal dan tugas lama ikut memakai pemetaan yang sama.
+
 ## Penyimpanan data
 
 Backend menyimpan data aplikasi ke PostgreSQL melalui `DATABASE_URL` pada environment server. Sebagian besar koleksi berada dalam `application_state` (JSONB), pengumuman publik memakai tabel relasional, dan isi file unggahan berada dalam tabel `uploaded_files`. `data/db.json` adalah sumber bootstrap/cadangan lama, bukan penyimpanan runtime.
+
+Di portal admin, daftar siswa, guru/staf, PPDB, pengumuman, galeri, video, informasi internal, KOMBEL, pesan, tugas, dan pengumpulan dapat dihapus sekaligus dengan memilih item. Data yang dihapus masuk ke **Tempat Sampah** untuk dipulihkan atau dihapus permanen. Tempat Sampah juga menyediakan aksi untuk memulihkan semua item atau menghapus semua item secara permanen.
+
+## Impor data siswa dan guru/staf
+
+Admin dapat mengunduh **Template Excel** dari menu Siswa atau Guru & Staf, mengisi satu workbook `.xlsx`, lalu memilih **Impor Excel**. Workbook harus memiliki sheet `Siswa` dan `Guru & Staff`. Impor menambahkan atau memperbarui profil berdasarkan NISN/NIP; data yang tidak tercantum di file tidak dihapus. Impor hanya mengelola profil dan tidak membuat akun login. Gunakan format teks untuk NISN, NIS, NIP, dan nomor telepon agar angka nol di awal tidak hilang.
+
+Kolom wajib siswa: NISN, Nama Lengkap, Email, Jenis Kelamin (`Laki-laki`/`Perempuan`), dan Kelas. Kolom wajib guru/staf: NIP, Nama Lengkap, Mata Pelajaran/Jabatan, Departemen, dan Email. Departemen harus `MIPA`, `Bahasa`, `IPS`, `Seni & Olahraga`, `BK`, atau `Informatika`. Kelas yang diampu guru dapat dipisahkan dengan koma.
 
 Frontend masih menggunakan `localStorage` untuk preferensi tampilan dan sesi/token, serta menyediakan data lokal sebagai fallback jika API gagal. Karena itu, gunakan aplikasi melalui backend (`npm run dev`), bukan membuka `index.html` langsung. Rincian setup dan batasan migrasi ada di [DATABASE-MIGRATION.md](DATABASE-MIGRATION.md).
 

@@ -29,6 +29,7 @@ import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { verifyPassword } from '../auth';
 import { DEFAULT_CONTACT_INFO } from '../../src/utils/contactInfoDefaults';
+import { normalizeSchoolClassId } from '../../src/utils/schoolClasses';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -56,7 +57,6 @@ const warn = (m: string) => warnings.push(m);
 // Nilai yang diizinkan (cermin dari CHECK pada 001_initial_schema.sql)
 // ---------------------------------------------------------------------------
 const ENUMS = {
-  major: ['MIPA', 'IPS', 'Fase E (Umum)'],
   gender: ['Laki-laki', 'Perempuan'],
   department: ['MIPA', 'Bahasa', 'IPS', 'Seni & Olahraga', 'BK', 'Informatika'],
   role: ['siswa', 'guru', 'admin', 'kepala_sekolah', 'ketua_kombel'],
@@ -185,6 +185,24 @@ async function buildPlan() {
     portalAnnouncements: arr('portalAnnouncements'), passwordResets: arr('passwordResets'),
     contactInfo: { ...DEFAULT_CONTACT_INFO, ...(raw.contactInfo || {}) }
   };
+  for (const student of src.students) {
+    student.classId = normalizeSchoolClassId(String(student.classId || ''));
+    student.className = student.classId;
+    delete student.major;
+  }
+  for (const teacher of src.teachers) {
+    teacher.classesTaught = (teacher.classesTaught || []).map((classId: string) => normalizeSchoolClassId(classId));
+    if (teacher.homeroomClass) teacher.homeroomClass = normalizeSchoolClassId(teacher.homeroomClass);
+  }
+  for (const schedule of src.schedules) schedule.classId = normalizeSchoolClassId(String(schedule.classId || ''));
+  for (const assignment of src.assignments) {
+    assignment.classId = normalizeSchoolClassId(String(assignment.classId || ''));
+    assignment.className = assignment.classId;
+  }
+  for (const submission of src.submissions) submission.classId = normalizeSchoolClassId(String(submission.classId || ''));
+  for (const announcement of src.portalAnnouncements) {
+    if (announcement.targetClass) announcement.targetClass = normalizeSchoolClassId(announcement.targetClass);
+  }
 
   // Sama seperti ensureDefaults() di server/db.ts: wali kelas diturunkan dari data siswa
   // bila guru belum punya homeroomClass dan hanya ada satu kelas yang cocok.
@@ -213,20 +231,17 @@ async function buildPlan() {
   const assignmentById = new Map(src.assignments.map(a => [a.id, a]));
 
   // --- Kelas: dikumpulkan dari semua tempat yang menyebut classId
-  const classes = new Map<string, { id: string; name: string; major: string | null; academic_year: string | null }>();
-  const addClass = (id: unknown, name?: unknown, major?: unknown, year?: unknown) => {
-    if (typeof id !== 'string' || !id.trim()) return;
+  const classes = new Map<string, { id: string; name: string; academic_year: string | null }>();
+  const addClass = (value: unknown, _name?: unknown, _major?: unknown, year?: unknown) => {
+    if (typeof value !== 'string' || !value.trim()) return;
+    const id = normalizeSchoolClassId(value);
     const cur = classes.get(id);
-    const hasName = typeof name === 'string' && name.trim() && name !== id;
     if (!cur) {
       classes.set(id, {
-        id, name: hasName ? String(name) : id,
-        major: typeof major === 'string' && ENUMS.major.includes(major) ? major : null,
+        id, name: id,
         academic_year: typeof year === 'string' ? year : null
       });
     } else {
-      if (hasName && cur.name === id) cur.name = String(name);
-      if (!cur.major && typeof major === 'string' && ENUMS.major.includes(major)) cur.major = major;
       if (!cur.academic_year && typeof year === 'string') cur.academic_year = year;
     }
   };
@@ -267,7 +282,7 @@ async function buildPlan() {
     add('students', {
       id: s.id, nisn: required(w, 'nisn', s.nisn), nis: required(w, 'nis', s.nis),
       full_name: required(w, 'fullName', s.fullName), gender: checkEnum('gender', s.gender, w),
-      class_id: required(w, 'classId', s.classId), major: checkEnum('major', s.major, w),
+      class_id: required(w, 'classId', s.classId),
       academic_year: required(w, 'academicYear', s.academicYear),
       homeroom_teacher_id: homeroomId, homeroom_teacher_legacy: nz(s.homeroomTeacher)
     });
