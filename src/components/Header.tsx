@@ -47,8 +47,10 @@ export const Header: React.FC<HeaderProps> = ({
   }, []);
 
   useEffect(() => {
+    const desktopViewport = window.matchMedia('(min-width: 1280px)');
     let lastScrollY = window.scrollY;
-    let accumulatedScrollDelta = 0;
+    let activeScrollDirection: 'up' | 'down' | null = null;
+    let directionalScrollDistance = 0;
     let animationFrame = 0;
 
     const updateHeaderOnScroll = () => {
@@ -56,23 +58,28 @@ export const Header: React.FC<HeaderProps> = ({
       const currentScrollY = window.scrollY;
       const scrollDelta = currentScrollY - lastScrollY;
 
-      if (currentScrollY <= 8) {
+      if (!desktopViewport.matches || currentScrollY <= 8) {
         setIsCollapsed(false);
-        accumulatedScrollDelta = 0;
+        activeScrollDirection = null;
+        directionalScrollDistance = 0;
       } else if (mobileMenuOpen) {
         setIsCollapsed(false);
-        accumulatedScrollDelta = 0;
-      } else if (scrollDelta > 0) {
-        accumulatedScrollDelta = Math.max(0, accumulatedScrollDelta) + scrollDelta;
-        if (accumulatedScrollDelta >= 12 && currentScrollY > 90) {
-          setIsCollapsed(true);
-          accumulatedScrollDelta = 0;
+        activeScrollDirection = null;
+        directionalScrollDistance = 0;
+      } else if (scrollDelta !== 0) {
+        const nextDirection = scrollDelta > 0 ? 'down' : 'up';
+        if (nextDirection !== activeScrollDirection) {
+          activeScrollDirection = nextDirection;
+          directionalScrollDistance = 0;
         }
-      } else if (scrollDelta < 0) {
-        accumulatedScrollDelta = Math.min(0, accumulatedScrollDelta) + scrollDelta;
-        if (accumulatedScrollDelta <= -12) {
+        directionalScrollDistance += Math.abs(scrollDelta);
+
+        if (nextDirection === 'down' && directionalScrollDistance >= 56 && currentScrollY > 120) {
+          setIsCollapsed(true);
+          directionalScrollDistance = 0;
+        } else if (nextDirection === 'up' && directionalScrollDistance >= 48) {
           setIsCollapsed(false);
-          accumulatedScrollDelta = 0;
+          directionalScrollDistance = 0;
         }
       }
 
@@ -85,9 +92,21 @@ export const Header: React.FC<HeaderProps> = ({
       }
     };
 
+    const handleViewportResize = () => {
+      if (!desktopViewport.matches) {
+        setIsCollapsed(false);
+        activeScrollDirection = null;
+        directionalScrollDistance = 0;
+        lastScrollY = window.scrollY;
+      }
+    };
+
     window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', handleViewportResize, { passive: true });
+    handleViewportResize();
     return () => {
       window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleViewportResize);
       if (animationFrame) window.cancelAnimationFrame(animationFrame);
     };
   }, [mobileMenuOpen]);
