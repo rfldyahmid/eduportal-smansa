@@ -54,6 +54,8 @@ import {
   fetchContactInfo,
   fetchAssignments,
   fetchPortalAnnouncements,
+  savePortalAnnouncementApi,
+  removePortalAnnouncementApi,
   fetchSubmissions,
   downloadSubmissionFile,
   updateContactInfo as apiUpdateContactInfo,
@@ -260,6 +262,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
   const [internalSubTab, setInternalSubTab] = useState<'pengumuman' | 'tugas' | 'pengumpulan'>('pengumuman');
   const [internalSearch, setInternalSearch] = useState('');
   const [internalLoadError, setInternalLoadError] = useState('');
+  const [internalActionError, setInternalActionError] = useState('');
+  const [isInternalAnnouncementFormOpen, setIsInternalAnnouncementFormOpen] = useState(false);
+  const [isSavingInternalAnnouncement, setIsSavingInternalAnnouncement] = useState(false);
+  const [editingInternalAnnouncement, setEditingInternalAnnouncement] = useState<PortalAnnouncement | null>(null);
+  const [internalAnnouncementForm, setInternalAnnouncementForm] = useState({
+    title: '',
+    category: 'Umum' as PortalAnnouncement['category'],
+    content: '',
+    isImportant: false
+  });
   const [downloadingSubmissionId, setDownloadingSubmissionId] = useState<string | null>(null);
 
   // ---------------- ANNOUNCEMENTS STATE ----------------
@@ -1248,6 +1260,65 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
     return [item.studentName, item.studentNisn, item.classId, item.status, assignment?.title || '', assignment?.teacherName || '']
       .some(value => value.toLocaleLowerCase('id-ID').includes(normalizedInternalSearch));
   });
+
+  const openNewInternalAnnouncement = () => {
+    setEditingInternalAnnouncement(null);
+    setInternalAnnouncementForm({ title: '', category: 'Umum', content: '', isImportant: false });
+    setInternalActionError('');
+    setIsInternalAnnouncementFormOpen(true);
+  };
+
+  const openEditInternalAnnouncement = (item: PortalAnnouncement) => {
+    setEditingInternalAnnouncement(item);
+    setInternalAnnouncementForm({
+      title: item.title,
+      category: item.category,
+      content: item.content,
+      isImportant: Boolean(item.isImportant)
+    });
+    setInternalActionError('');
+    setIsInternalAnnouncementFormOpen(true);
+  };
+
+  const handleSaveInternalAnnouncement = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setIsSavingInternalAnnouncement(true);
+    setInternalActionError('');
+    try {
+      const saved = await savePortalAnnouncementApi({
+        id: editingInternalAnnouncement?.id || '',
+        ...internalAnnouncementForm,
+        teacherId: editingInternalAnnouncement?.teacherId || '',
+        teacherName: editingInternalAnnouncement?.teacherName || currentUser.fullName,
+        createdAt: editingInternalAnnouncement?.createdAt || new Date().toISOString()
+      });
+      setInternalAnnouncements(previous => [
+        saved,
+        ...previous.filter(item => item.id !== saved.id)
+      ]);
+      setIsInternalAnnouncementFormOpen(false);
+      setEditingInternalAnnouncement(null);
+    } catch (error) {
+      setInternalActionError(error instanceof Error ? error.message : 'Pengumuman internal gagal disimpan.');
+    } finally {
+      setIsSavingInternalAnnouncement(false);
+    }
+  };
+
+  const handleDeleteInternalAnnouncement = async (item: PortalAnnouncement) => {
+    if (!window.confirm(`Hapus pengumuman "${item.title}"?`)) return;
+    setInternalActionError('');
+    try {
+      await removePortalAnnouncementApi(item.id);
+      setInternalAnnouncements(previous => previous.filter(announcement => announcement.id !== item.id));
+      if (editingInternalAnnouncement?.id === item.id) {
+        setIsInternalAnnouncementFormOpen(false);
+        setEditingInternalAnnouncement(null);
+      }
+    } catch (error) {
+      setInternalActionError(error instanceof Error ? error.message : 'Pengumuman internal gagal dihapus.');
+    }
+  };
 
   const handleDownloadInternalSubmission = async (submission: AssignmentSubmission) => {
     setDownloadingSubmissionId(submission.id);
@@ -2688,35 +2759,149 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                 </button>
               ))}
             </div>
-            <div className="relative w-full sm:max-w-xs">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-              <input
-                type="search"
-                value={internalSearch}
-                onChange={event => setInternalSearch(event.target.value)}
-                placeholder="Cari kelas, guru, siswa, atau isi..."
-                className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-xs focus:outline-none focus:ring-2 focus:ring-blue-900"
-              />
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+              {internalSubTab === 'pengumuman' && (
+                <button
+                  type="button"
+                  onClick={openNewInternalAnnouncement}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-900 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-800"
+                >
+                  <PlusCircle className="h-4 w-4" />
+                  Buat pengumuman
+                </button>
+              )}
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                <input
+                  type="search"
+                  value={internalSearch}
+                  onChange={event => setInternalSearch(event.target.value)}
+                  placeholder="Cari kelas, guru, siswa, atau isi..."
+                  className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-xs focus:outline-none focus:ring-2 focus:ring-blue-900"
+                />
+              </div>
             </div>
           </div>
 
           {internalLoadError && (
             <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{internalLoadError}</div>
           )}
+          {internalActionError && (
+            <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{internalActionError}</div>
+          )}
 
           {internalSubTab === 'pengumuman' && (
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              {filteredInternalAnnouncements.length ? filteredInternalAnnouncements.map(item => (
-                <article key={item.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-900">{item.targetClass || item.category}</span>
-                    {item.isImportant && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-800">Penting</span>}
+            <div className="space-y-4">
+              {isInternalAnnouncementFormOpen && (
+                <form onSubmit={handleSaveInternalAnnouncement} className="space-y-4 rounded-xl border border-blue-200 bg-blue-50/50 p-4">
+                  <div>
+                    <h3 className="font-bold text-slate-900">{editingInternalAnnouncement ? 'Ubah pengumuman internal' : 'Buat pengumuman internal'}</h3>
+                    <p className="mt-1 text-xs text-slate-600">Pengumuman ini akan tampil kepada murid sesuai kategori kelas yang dipilih.</p>
                   </div>
-                  <h3 className="mt-3 font-bold text-slate-900">{item.title}</h3>
-                  <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{item.content}</p>
-                  <p className="mt-3 border-t border-slate-100 pt-3 text-xs text-slate-500">Oleh {item.teacherName} · {new Date(item.createdAt).toLocaleString('id-ID')}</p>
-                </article>
-              )) : <p className="col-span-full rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">Belum ada pengumuman internal yang sesuai.</p>}
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="space-y-1 text-xs font-semibold text-slate-700">
+                      Judul
+                      <input
+                        required
+                        maxLength={150}
+                        value={internalAnnouncementForm.title}
+                        onChange={event => setInternalAnnouncementForm(previous => ({ ...previous, title: event.target.value }))}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal"
+                        placeholder="Judul informasi"
+                      />
+                    </label>
+                    <label className="space-y-1 text-xs font-semibold text-slate-700">
+                      Sasaran
+                      <select
+                        value={internalAnnouncementForm.category}
+                        onChange={event => setInternalAnnouncementForm(previous => ({
+                          ...previous,
+                          category: event.target.value as PortalAnnouncement['category']
+                        }))}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal"
+                      >
+                        <option>Umum</option>
+                        <option>Kelas X</option>
+                        <option>Kelas XI</option>
+                        <option>Kelas XII</option>
+                      </select>
+                    </label>
+                  </div>
+                  <label className="block space-y-1 text-xs font-semibold text-slate-700">
+                    Isi informasi
+                    <textarea
+                      required
+                      rows={4}
+                      maxLength={10000}
+                      value={internalAnnouncementForm.content}
+                      onChange={event => setInternalAnnouncementForm(previous => ({ ...previous, content: event.target.value }))}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal"
+                      placeholder="Tulis informasi untuk guru dan murid..."
+                    />
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={internalAnnouncementForm.isImportant}
+                      onChange={event => setInternalAnnouncementForm(previous => ({ ...previous, isImportant: event.target.checked }))}
+                      className="rounded border-slate-300 text-blue-900 focus:ring-blue-900"
+                    />
+                    Tandai sebagai informasi penting
+                  </label>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsInternalAnnouncementFormOpen(false);
+                        setEditingInternalAnnouncement(null);
+                      }}
+                      className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSavingInternalAnnouncement}
+                      className="rounded-lg bg-blue-900 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-800 disabled:opacity-50"
+                    >
+                      {isSavingInternalAnnouncement ? 'Menyimpan...' : 'Simpan pengumuman'}
+                    </button>
+                  </div>
+                </form>
+              )}
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                {filteredInternalAnnouncements.length ? filteredInternalAnnouncements.map(item => (
+                  <article key={item.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-900">{item.targetClass || item.category}</span>
+                      <div className="flex items-center gap-2">
+                        {item.isImportant && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-800">Penting</span>}
+                        <button
+                          type="button"
+                          onClick={() => openEditInternalAnnouncement(item)}
+                          className="rounded p-1.5 text-blue-900 hover:bg-blue-50"
+                          title="Ubah pengumuman"
+                          aria-label={`Ubah pengumuman ${item.title}`}
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteInternalAnnouncement(item)}
+                          className="rounded p-1.5 text-rose-600 hover:bg-rose-50"
+                          title="Hapus pengumuman"
+                          aria-label={`Hapus pengumuman ${item.title}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                    <h3 className="mt-3 font-bold text-slate-900">{item.title}</h3>
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{item.content}</p>
+                    <p className="mt-3 border-t border-slate-100 pt-3 text-xs text-slate-500">Oleh {item.teacherName} · {new Date(item.createdAt).toLocaleString('id-ID')}</p>
+                  </article>
+                )) : <p className="col-span-full rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">Belum ada pengumuman internal yang sesuai.</p>}
+              </div>
             </div>
           )}
 

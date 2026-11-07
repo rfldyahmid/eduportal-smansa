@@ -167,7 +167,10 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onLog
     () => submissions.filter(submission => myAssignments.some(assignment => assignment.id === submission.assignmentId)),
     [submissions, myAssignments]
   );
-  const myAnnouncements = useMemo(() => announcements.filter(a => a.teacherId === teacher.id), [announcements, teacher.id]);
+  const myAnnouncements = useMemo(
+    () => announcements.filter(a => a.teacherId === teacher.id || !a.teacherId),
+    [announcements, teacher.id]
+  );
 
   const resetSchedule = () => {
     setScheduleForm({
@@ -923,8 +926,8 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onLog
 
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
             <div className="p-5 border-b">
-              <h2 className="font-bold text-base text-slate-900">Pengumuman Internal Anda</h2>
-              <p className="text-xs text-slate-500 mt-0.5">Hanya tampil di portal siswa yang bersangkutan.</p>
+              <h2 className="font-bold text-base text-slate-900">Pengumuman Internal</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Termasuk informasi bersama yang diterbitkan admin sekolah.</p>
             </div>
             <div className="divide-y text-xs">
               {myAnnouncements.length ? (
@@ -936,11 +939,14 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onLog
                         <span className="font-bold text-slate-900">{item.title}</span>
                       </div>
                       <p className="text-slate-600 mt-1 line-clamp-2">{item.content}</p>
+                      <p className="mt-1 text-[11px] text-slate-400">Oleh {item.teacherName}</p>
                     </div>
-                    <div className="flex gap-1">
-                      <button onClick={() => startEditAnnouncement(item)} className="p-1.5 rounded hover:bg-slate-100 text-slate-600" title="Edit"><Pencil size={14} /></button>
-                      <button onClick={() => handleDeleteAnnouncement(item.id)} className="p-1.5 rounded hover:bg-rose-50 text-rose-600" title="Hapus"><Trash2 size={14} /></button>
-                    </div>
+                    {item.teacherId && item.teacherId === teacher.id && (
+                      <div className="flex gap-1">
+                        <button onClick={() => startEditAnnouncement(item)} className="p-1.5 rounded hover:bg-slate-100 text-slate-600" title="Edit"><Pencil size={14} /></button>
+                        <button onClick={() => handleDeleteAnnouncement(item.id)} className="p-1.5 rounded hover:bg-rose-50 text-rose-600" title="Hapus"><Trash2 size={14} /></button>
+                      </div>
+                    )}
                   </div>
                 ))
               ) : (

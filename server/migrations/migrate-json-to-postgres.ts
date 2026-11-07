@@ -480,10 +480,10 @@ async function buildPlan() {
   // --- Pengumuman portal
   for (const p of src.portalAnnouncements) {
     const w = `portalAnnouncements/${p.id}`;
-    if (!teacherById.has(p.teacherId)) err(`${w}: teacherId ${p.teacherId} tidak ada di teachers.`);
+    if (p.teacherId && !teacherById.has(p.teacherId)) err(`${w}: teacherId ${p.teacherId} tidak ada di teachers.`);
     add('portal_announcements', {
       id: p.id, title: required(w, 'title', p.title), category: checkEnum('portalCategory', p.category, w),
-      target_class: nz(p.targetClass), content: required(w, 'content', p.content), teacher_id: p.teacherId,
+      target_class: nz(p.targetClass), content: required(w, 'content', p.content), teacher_id: p.teacherId || null,
       teacher_name_legacy: nz(p.teacherName), created_at: createdAtRequired(w, p.createdAt), is_important: Boolean(p.isImportant)
     });
   }
