@@ -102,6 +102,132 @@
   pointer-events: none;
 }
 
+:root:not(.dark) body,
+:root:not(.dark) #root > div {
+  background-color: #f5f2ea;
+  color: #202b3b;
+}
+
+:root:not(.dark) .school-header {
+  background-color: #020617;
+  box-shadow: 0 8px 24px -20px rgb(2 6 23 / 70%);
+}
+
+:root:not(.dark) .school-header__upper > div {
+  background-color: #020617;
+  border-color: #1e293b;
+}
+
+:root:not(.dark) .school-header__upper .font-serif-title {
+  color: #f8fafc;
+}
+
+:root:not(.dark) .school-header__upper .text-slate-500 {
+  color: #aab4c4;
+}
+
+:root:not(.dark) .school-header__upper > div > div > div {
+  border-color: #263248;
+  background-color: #0b1222;
+  color: #cbd5e1;
+  box-shadow: none;
+}
+
+:root:not(.dark) .school-header__upper a:hover,
+:root:not(.dark) .school-header__upper a:focus-visible {
+  color: #f4c76d;
+}
+
+:root:not(.dark) .school-header__upper a svg {
+  color: #e8ad3d;
+}
+
+:root:not(.dark) .school-header__nav {
+  background: #020617;
+  box-shadow: none;
+}
+
+:root:not(.dark) .school-header__nav button {
+  color: #e2e8f0;
+}
+
+:root:not(.dark) .school-header__nav button:hover {
+  color: #f4c76d;
+}
+
+:root:not(.dark) .school-header__nav::after {
+  background: #c99539;
+  opacity: 0.9;
+}
+
+:root:not(.dark) .school-header__nav > div > button,
+:root:not(.dark) .school-header__nav > div > div > div > button {
+  color: #e2e8f0;
+}
+
+:root:not(.dark) .school-header__nav > div > button:hover,
+:root:not(.dark) .school-header__nav > div > div > div > button:hover {
+  color: #f4c76d;
+}
+
+:root:not(.dark) .school-header__nav > div > div > div > button.font-extrabold {
+  color: #f4c76d;
+}
+
+:root:not(.dark) .school-header__nav button span[aria-hidden="true"] {
+  background: #c99539;
+}
+
+:root:not(.dark) .school-header__nav button[class*="bg-amber-400"] {
+  color: #172033;
+  background-color: #e8ad3d;
+}
+
+:root:not(.dark) .school-header__nav button[class*="bg-amber-400"]:hover {
+  background-color: #f2c56e;
+}
+
+:root:not(.dark) .school-header__nav #mobile-navigation {
+  border-color: #263248;
+  background-color: #0b1222;
+}
+
+:root:not(.dark) .school-header__nav #mobile-navigation button {
+  color: #e2e8f0;
+}
+
+:root:not(.dark) .school-header__nav #mobile-navigation button:hover,
+:root:not(.dark) .school-header__nav #mobile-navigation button.bg-blue-50 {
+  background-color: #172033;
+  color: #f4c76d;
+}
+
+:root:not(.dark) main [class~="bg-slate-50"],
+:root:not(.dark) main [class~="bg-gray-50"] {
+  background-color: #f5f2ea;
+}
+
+:root:not(.dark) main [class~="bg-slate-100"],
+:root:not(.dark) main [class~="bg-gray-100"] {
+  background-color: #eee9df;
+}
+
+:root:not(.dark) main [class~="bg-white"] {
+  background-color: #fffefa;
+}
+
+:root:not(.dark) main [class~="border-slate-100"],
+:root:not(.dark) main [class~="border-slate-200"],
+:root:not(.dark) main [class~="border-gray-100"],
+:root:not(.dark) main [class~="border-gray-200"] {
+  border-color: #e6e0d4;
+}
+
+:root:not(.dark) main [class~="bg-white"][class~="rounded-xl"],
+:root:not(.dark) main [class~="bg-white"][class~="rounded-2xl"] {
+  box-shadow: 0 10px 28px -24px rgb(32 43 59 / 45%);
+}
+
 .dark body,
 .dark #root {
   background-color: #0f172a;
