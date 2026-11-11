@@ -4,7 +4,8 @@ import { getCurrentAcademicYear } from '../utils/academicYear';
 import { IMAGES } from '../assets/images';
 import { LatestAnnouncements } from './LatestAnnouncements';
 import { ArrowRight, ChevronLeft, ChevronRight, ShieldCheck } from 'lucide-react';
-import { fetchHomeHeroSlides } from '../utils/api';
+import { GalleryPhoto } from '../types';
+import { fetchGallery, fetchHomeHeroSlides } from '../utils/api';
 
 interface HomeViewProps {
   onNavigate: (tab: string) => void;
@@ -14,8 +15,28 @@ interface HomeViewProps {
 export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenPortal }) => {
   const academicYear = getCurrentAcademicYear();
   const [heroImages, setHeroImages] = useState<string[]>([IMAGES.heroSchool]);
+  const [galleryItems, setGalleryItems] = useState<GalleryPhoto[]>([]);
+  const [galleryLoading, setGalleryLoading] = useState(true);
+  const [galleryError, setGalleryError] = useState(false);
   const [activeHeroIndex, setActiveHeroIndex] = useState(0);
   const touchStartX = useRef<number | null>(null);
+
+  useEffect(() => {
+    const loadGallery = () => {
+      setGalleryLoading(true);
+      setGalleryError(false);
+      fetchGallery()
+        .then(items => setGalleryItems(items))
+        .catch(error => {
+          console.error('Gagal memuat galeri untuk beranda:', error);
+          setGalleryError(true);
+        })
+        .finally(() => setGalleryLoading(false));
+    };
+    loadGallery();
+    window.addEventListener('gallery-updated', loadGallery);
+    return () => window.removeEventListener('gallery-updated', loadGallery);
+  }, []);
 
   useEffect(() => {
     const loadSlides = () => {
@@ -40,6 +61,8 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenPortal }) 
   const moveHero = (direction: -1 | 1) => {
     setActiveHeroIndex(index => (index + direction + heroImages.length) % heroImages.length);
   };
+
+  const galleryPreview = galleryItems.slice(0, 2);
 
   return (
     <div className="space-y-12 pb-16 sm:space-y-16 sm:pb-20 lg:space-y-24">
@@ -307,37 +330,37 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenPortal }) 
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="group relative rounded-xl overflow-hidden aspect-[16/9] bg-slate-800">
-              <img
-                src={IMAGES.studentsActivity}
-                alt="Praktikum Kolaborasi Riset Sains Siswa"
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                referrerPolicy="no-referrer"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/30 to-transparent flex items-end p-5">
-                <div>
-                  <h4 className="text-sm font-semibold text-white">Pembelajaran & Literasi Digital Terpadu</h4>
-                  <p className="text-xs text-slate-300 mt-0.5">Penguatan literasi teknologi, informatika, dan kolaborasi aktif siswa di kelas.</p>
-                </div>
-              </div>
+          {galleryLoading ? (
+            <p className="py-8 text-center text-sm text-slate-300">Memuat foto kehidupan sekolah...</p>
+          ) : galleryError ? (
+            <div className="py-8 text-center text-sm text-slate-300">
+              <p>Galeri belum dapat dimuat. Silakan coba lagi.</p>
+              <button type="button" onClick={() => window.dispatchEvent(new Event('gallery-updated'))} className="mt-2 font-semibold text-amber-400 hover:text-amber-300">
+                Coba lagi
+              </button>
             </div>
-
-            <div className="group relative rounded-xl overflow-hidden aspect-[16/9] bg-slate-800">
-              <img
-                src={IMAGES.extracurricular}
-                alt="Prestasi Ekstrakurikuler dan Kepemimpinan"
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                referrerPolicy="no-referrer"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/30 to-transparent flex items-end p-5">
-                <div>
-                  <h4 className="text-sm font-semibold text-white">Pemberdayaan Bakat & Penyerahan Trofi Prestasi</h4>
-                  <p className="text-xs text-slate-300 mt-0.5">Dukungan penuh untuk pengembangan minat olahraga, seni, dan kepemimpinan.</p>
+          ) : galleryPreview.length === 0 ? (
+            <p className="py-8 text-center text-sm text-slate-300">Belum ada foto kehidupan sekolah di galeri.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {galleryPreview.map(item => (
+                <div key={item.id} className="group relative rounded-xl overflow-hidden aspect-[16/9] bg-slate-800">
+                  <img
+                    src={item.image}
+                    alt={item.title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/30 to-transparent flex items-end p-5">
+                    <div>
+                      <h4 className="text-sm font-semibold text-white">{item.title}</h4>
+                      <p className="text-xs text-slate-300 mt-0.5 line-clamp-2">{item.description || item.category}</p>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ))}
             </div>
-          </div>
+          )}
         </div>
       </section>
 
