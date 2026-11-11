@@ -1,4 +1,5 @@
-
+import swaggerUi from 'swagger-ui-express';
+import { swaggerSpec } from './server/config/swagger';
 import 'dotenv/config';
 import express from 'express';
 import fs from 'node:fs/promises';
@@ -65,6 +66,9 @@ if (
 }
 
 const app = express();
+
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
 app.use(express.json({ limit: '36mb' }));
 app.get('/uploads/:filename', async (req, res, next) => {
   const filename = path.basename(req.params.filename);
