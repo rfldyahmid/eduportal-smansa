@@ -22,6 +22,7 @@ import { DEFAULT_KOMBEL_INFO } from '../src/utils/kombelInfoDefaults';
 import { listAnnouncements } from './repositories/announcements';
 import { pool } from './pg';
 import { normalizeSchoolClassId } from '../src/utils/schoolClasses';
+import { getCanonicalTeacherSubject } from '../src/utils/teacherSubjects';
 
 export interface DatabaseSchema {
   users: UserAccount[];
@@ -172,19 +173,21 @@ export function ensureDefaults(data: Partial<DatabaseSchema>): DatabaseSchema {
     users: Array.isArray(data.users) ? data.users : [],
     students,
     teachers: teachers.map(teacher => {
+      const { department: _legacyDepartment, ...teacherData } = teacher as Teacher & { department?: unknown };
+      const subject = getCanonicalTeacherSubject(teacher.subject) || teacher.subject;
       const classesTaught = (teacher.classesTaught || []).map(normalizeSchoolClassId);
       const homeroomClass = teacher.homeroomClass
         ? normalizeSchoolClassId(teacher.homeroomClass)
         : undefined;
-      if (homeroomClass) return { ...teacher, classesTaught, homeroomClass };
+      if (homeroomClass) return { ...teacherData, subject, classesTaught, homeroomClass };
       const assignedClasses = new Set(
         students
           .filter(student => student.homeroomTeacher === teacher.fullName)
           .map(student => student.classId)
       );
       return assignedClasses.size === 1
-        ? { ...teacher, classesTaught, homeroomClass: assignedClasses.values().next().value }
-        : { ...teacher, classesTaught };
+        ? { ...teacherData, subject, classesTaught, homeroomClass: assignedClasses.values().next().value }
+        : { ...teacherData, subject, classesTaught };
     }),
     schedules: (Array.isArray(data.schedules) ? data.schedules : []).map(item => ({
       ...item,

@@ -1566,7 +1566,6 @@ app.post('/api/admin/roster/import', requireAdmin, async (req, res) => {
   const studentCounts = { created: 0, updated: 0 };
   const teacherCounts = { created: 0, updated: 0 };
   const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const departments = ['MIPA', 'Bahasa', 'IPS', 'Seni & Olahraga', 'BK', 'Informatika'];
 
   for (const [index, raw] of studentRows.entries()) {
     const row = raw && typeof raw === 'object' ? raw : {};
@@ -1633,7 +1632,6 @@ app.post('/api/admin/roster/import', requireAdmin, async (req, res) => {
     const fullName = String(row.fullName || '').trim();
     const subject = String(row.subject || '').trim();
     const email = String(row.email || '').trim();
-    const department = String(row.department || '').trim();
     const classesRaw: unknown[] = Array.isArray(row.classesTaught) ? row.classesTaught : [];
     const classesTaught: string[] = classesRaw.map((value: unknown): string =>
       normalizeSchoolClassId(String(value || '').trim())
@@ -1642,11 +1640,10 @@ app.post('/api/admin/roster/import', requireAdmin, async (req, res) => {
     const homeroomClass = homeroomInput ? normalizeSchoolClassId(homeroomInput) : '';
     if (
       !nip || !fullName || !subject || !emailPattern.test(email) ||
-      !departments.includes(department) ||
       classesTaught.some((classId: string) => !isSchoolClass(classId)) ||
       (homeroomClass && !isSchoolClass(homeroomClass))
     ) {
-      errors.push(`Sheet Guru & Staff baris ${sourceRow}: NIP, nama, mata pelajaran/jabatan, email, departemen, atau kelas tidak valid.`);
+      errors.push(`Sheet Guru & Staff baris ${sourceRow}: NIP, nama, mata pelajaran/jabatan, email, atau kelas tidak valid.`);
       continue;
     }
     if (teacherSeen.has(nip)) {
@@ -1675,7 +1672,6 @@ app.post('/api/admin/roster/import', requireAdmin, async (req, res) => {
       fullName,
       degree: String(row.degree || '').trim() || existing?.degree || '',
       subject,
-      department: department as Teacher['department'],
       classesTaught: [...new Set(classesTaught.length ? classesTaught : existing?.classesTaught || [])],
       homeroomClass: homeroomClass || existing?.homeroomClass || '',
       education: String(row.education || '').trim() || existing?.education || '',
@@ -1771,7 +1767,6 @@ app.post('/api/teachers', requireAdmin, async (req, res) => {
       fullName: String(body.fullName).trim(),
       degree: String(body.degree || '').trim(),
       subject: String(body.subject).trim(),
-      department: body.department || 'MIPA',
       classesTaught: Array.isArray(body.classesTaught) ? body.classesTaught : ['X-A'],
       homeroomClass,
       education: String(body.education || '').trim(),
@@ -1825,7 +1820,8 @@ app.put('/api/teachers/:id', requireAdminOrKombel, async (req: AuthenticatedRequ
           bio: req.body?.bio,
           photoUrl: req.body?.photoUrl
         }).filter(([, value]) => value !== undefined))
-      : req.body;
+        : { ...req.body };
+    delete updates.department;
     if (updates?.email !== undefined && updates.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(updates.email).trim())) {
       return res.status(400).json({ message: 'Format email guru tidak valid.' });
     }

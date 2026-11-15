@@ -11,7 +11,6 @@ interface TeachersViewProps {
 export const TeachersView: React.FC<TeachersViewProps> = ({ onNavigate }) => {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedDept, setSelectedDept] = useState<string>('Semua');
 
   useEffect(() => {
     fetchTeachers()
@@ -24,15 +23,12 @@ export const TeachersView: React.FC<TeachersViewProps> = ({ onNavigate }) => {
       });
   }, []);
 
-  const departments = ['Semua', 'MIPA', 'Bahasa', 'IPS', 'Informatika', 'Seni & Olahraga', 'BK'];
-
   const filteredTeachers = teachers.filter((teacher) => {
-    const matchesDept = selectedDept === 'Semua' || teacher.department === selectedDept;
     const matchesSearch =
       teacher.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       teacher.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
       teacher.education.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesDept && matchesSearch;
+    return matchesSearch;
   });
 
   return (
@@ -56,23 +52,6 @@ export const TeachersView: React.FC<TeachersViewProps> = ({ onNavigate }) => {
 
       {/* Filter and Search Controls (Functional Buttons - zero slop) */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        {/* Department interactive tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
-          {departments.map((dept) => (
-            <button
-              key={dept}
-              onClick={() => setSelectedDept(dept)}
-              className={`px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap ${
-                selectedDept === dept
-                  ? 'bg-blue-900 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              {dept}
-            </button>
-          ))}
-        </div>
-
         {/* Search Input */}
         <div className="relative w-full md:w-72">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -93,7 +72,6 @@ export const TeachersView: React.FC<TeachersViewProps> = ({ onNavigate }) => {
           <button
             onClick={() => {
               setSearchQuery('');
-              setSelectedDept('Semua');
             }}
             className="text-xs text-blue-900 hover:underline font-semibold"
           >
@@ -119,9 +97,6 @@ export const TeachersView: React.FC<TeachersViewProps> = ({ onNavigate }) => {
                     />
                   </div>
                   <div className="space-y-1 min-w-0">
-                    <span className="text-[11px] font-semibold text-blue-900 uppercase tracking-wider block">
-                      {teacher.department}
-                    </span>
                     <h3 className="font-bold text-slate-900 text-sm sm:text-base leading-snug truncate" title={teacher.fullName}>
                       {teacher.fullName}
                     </h3>

@@ -53,7 +53,6 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onLog
     fullName: currentUser.fullName,
     degree: '',
     subject: '',
-    department: 'MIPA' as const,
     classesTaught: [],
     homeroomClass: '',
     education: '',
@@ -400,7 +399,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onLog
             </div>
             <h1 className="mt-0.5 break-words text-xl font-bold sm:text-3xl">{teacher.fullName}</h1>
             <p className="mt-1 break-words text-xs text-slate-300 sm:text-sm">
-              NIP: <span className="font-mono text-amber-300">{teacher.nip.replace(/\s+/g, '')}</span> · Mapel: {teacher.subject} ({teacher.department})
+              NIP: <span className="font-mono text-amber-300">{teacher.nip.replace(/\s+/g, '')}</span> · {teacher.subject === 'Kepala Sekolah' ? 'Jabatan' : 'Mapel'}: {teacher.subject}
             </p>
             <p className="text-xs sm:text-sm text-slate-300 mt-1">
               Kelas Wali: <span className="font-semibold text-amber-300">{teacher.homeroomClass || 'Belum ditetapkan oleh admin'}</span>

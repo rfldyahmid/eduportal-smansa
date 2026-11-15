@@ -4,6 +4,8 @@ Dokumen ini mencatat audit, konfigurasi, dan batasan migrasi PostgreSQL. Runtime
 
 Migrasi versi 8 mengubah label kelas lama bernomor 1–5 menjadi A–E pada tabel relasional dan menghapus kolom jurusan siswa/kelas. Saat runtime memuat state JSONB lama, referensi kelas pada profil, kelas guru, jadwal, tugas, pengumpulan, dan sasaran pengumuman dinormalisasi ke format yang sama. `npm run db:migrate` menerapkan migrasi SQL ini secara berurutan; tidak perlu mengedit data JSON secara manual.
 
+Migrasi versi 13 menghapus rumpun departemen dari data guru/staf, baik kolom relasional maupun profil di `application_state`. Form, direktori, API, dan template/impor Excel hanya menggunakan mata pelajaran atau jabatan.
+
 ## Status aktual lingkungan lokal (21 Oktober 2026)
 
 - Service PostgreSQL lokal `postgresql-x64-18` berjalan dan koneksi melalui `DATABASE_URL` pada `.env` berhasil diuji. Nilai `.env` tidak dicatat di dokumen ini.

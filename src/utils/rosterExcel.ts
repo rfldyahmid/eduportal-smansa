@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 import type { Student, Teacher } from '../types';
+import { getCanonicalTeacherSubject } from './teacherSubjects';
 
 export type StudentImportRow = Omit<Student, 'id' | 'className'> & { className?: string; sourceRow?: number };
 export type TeacherImportRow = Omit<Teacher, 'id' | 'photoUrl'> & { photoUrl?: string; sourceRow?: number };
@@ -14,7 +15,7 @@ const STUDENT_HEADERS = [
   'Wali Kelas', 'Tahun Ajaran'
 ];
 const TEACHER_HEADERS = [
-  'NIP', 'Nama Lengkap', 'Gelar', 'Mata Pelajaran / Jabatan', 'Departemen',
+  'NIP', 'Nama Lengkap', 'Gelar', 'Mata Pelajaran / Jabatan',
   'Email', 'Telepon', 'Pendidikan', 'Kelas Diampu', 'Wali Kelas', 'Bio'
 ];
 
@@ -47,14 +48,13 @@ function readRows(workbook: ExcelJS.Workbook, sheetName: string, aliases: Record
   });
   const requiredHeaders = sheetName === 'Siswa'
     ? ['nisn', 'fullName', 'email', 'gender', 'classId']
-    : ['nip', 'fullName', 'subject', 'email', 'department'];
+    : ['nip', 'fullName', 'subject', 'email'];
   const foundHeaders = new Set(headers.values());
   const missingHeaders = requiredHeaders.filter(header => !foundHeaders.has(header));
   if (missingHeaders.length) {
     const labels: Record<string, string> = {
       nisn: 'NISN', nip: 'NIP', fullName: 'Nama Lengkap', email: 'Email',
-      gender: 'Jenis Kelamin', classId: 'Kelas', subject: 'Mata Pelajaran / Jabatan',
-      department: 'Departemen'
+      gender: 'Jenis Kelamin', classId: 'Kelas', subject: 'Mata Pelajaran / Jabatan'
     };
     throw new Error(`Sheet "${sheetName}" belum memiliki kolom wajib: ${missingHeaders.map(header => labels[header]).join(', ')}.`);
   }
@@ -93,8 +93,7 @@ const STUDENT_ALIASES: Record<string, string> = {
 const TEACHER_ALIASES: Record<string, string> = {
   nip: 'nip', nomornip: 'nip', namalengkap: 'fullName', nama: 'fullName', fullname: 'fullName',
   gelar: 'degree', degree: 'degree', matapelajaran: 'subject', jabatan: 'subject',
-  matapelajaranjabatan: 'subject', subject: 'subject', departemen: 'department',
-  rumpundepartemen: 'department', department: 'department', rumpun: 'department',
+  matapelajaranjabatan: 'subject', subject: 'subject',
   email: 'email', emailaktif: 'email', telepon: 'phone', notelepon: 'phone', phone: 'phone',
   pendidikan: 'education', education: 'education', kelasdiampu: 'classesTaught',
   kelasajar: 'classesTaught', kelasyangdiampu: 'classesTaught', walikelas: 'homeroomClass',
@@ -132,8 +131,7 @@ export async function parseRosterWorkbook(file: File): Promise<ParsedRosterWorkb
       nip: row.nip,
       fullName: row.fullName,
       degree: row.degree || '',
-      subject: row.subject,
-      department: row.department as Teacher['department'],
+      subject: getCanonicalTeacherSubject(row.subject) || row.subject,
       classesTaught: row.classesTaught ? row.classesTaught.split(/[,;]/).map(value => value.trim()).filter(Boolean) : [],
       homeroomClass: row.homeroomClass || '',
       education: row.education || '',
@@ -160,9 +158,9 @@ export async function downloadRosterTemplate(): Promise<void> {
   const teachers = workbook.addWorksheet('Guru & Staff');
   teachers.addRow(TEACHER_HEADERS);
   teachers.getColumn(1).numFmt = '@';
-  teachers.getColumn(7).numFmt = '@';
+  teachers.getColumn(6).numFmt = '@';
   teachers.views = [{ state: 'frozen', ySplit: 1 }];
-  teachers.autoFilter = { from: 'A1', to: 'K1' };
+  teachers.autoFilter = { from: 'A1', to: 'J1' };
 
   for (const sheet of workbook.worksheets) {
     sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };

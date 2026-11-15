@@ -32,7 +32,6 @@ export interface Teacher {
   fullName: string;
   degree: string;
   subject: string;
-  department: 'MIPA' | 'Bahasa' | 'IPS' | 'Seni & Olahraga' | 'BK' | 'Informatika';
   classesTaught: string[];
   homeroomClass?: string;
   education: string;

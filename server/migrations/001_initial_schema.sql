@@ -21,7 +21,16 @@ CREATE TABLE IF NOT EXISTS teachers (
   degree text NOT NULL DEFAULT '',
   subject text NOT NULL DEFAULT '',
   department text NOT NULL CHECK (
-    department IN ('MIPA', 'Bahasa', 'IPS', 'Seni & Olahraga', 'BK', 'Informatika')
+    department IN (
+      'Manajemen Pendidikan',
+      'MIPA (Sains)',
+      'Bahasa dan Sastra',
+      'BK',
+      'Pendidikan Agama dan Keagamaan',
+      'Ilmu Sosial dan Humaniora',
+      'Pendidikan Jasmani dan Olahraga',
+      'Seni, Desain, dan Keterampilan'
+    )
   ),
   education text NOT NULL DEFAULT '',
   email text NOT NULL DEFAULT '',

@@ -30,6 +30,7 @@ import pg from 'pg';
 import { verifyPassword } from '../auth';
 import { DEFAULT_CONTACT_INFO } from '../../src/utils/contactInfoDefaults';
 import { normalizeSchoolClassId } from '../../src/utils/schoolClasses';
+import { getCanonicalTeacherSubject } from '../../src/utils/teacherSubjects';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -58,7 +59,6 @@ const warn = (m: string) => warnings.push(m);
 // ---------------------------------------------------------------------------
 const ENUMS = {
   gender: ['Laki-laki', 'Perempuan'],
-  department: ['MIPA', 'Bahasa', 'IPS', 'Seni & Olahraga', 'BK', 'Informatika'],
   role: ['siswa', 'guru', 'admin', 'kepala_sekolah', 'ketua_kombel'],
   day: ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'],
   track: ['Zonasi', 'Prestasi Akademik', 'Prestasi Non-Akademik', 'Afirmasi', 'Pindah Tugas'],
@@ -262,7 +262,7 @@ async function buildPlan() {
     const w = `teachers/${t.id}`;
     add('teachers', {
       id: t.id, nip: required(w, 'nip', t.nip), full_name: required(w, 'fullName', t.fullName),
-      degree: str(t.degree), subject: str(t.subject), department: checkEnum('department', t.department, w),
+      degree: str(t.degree), subject: getCanonicalTeacherSubject(t.subject) || str(t.subject),
       education: str(t.education), email: str(t.email), phone: str(t.phone), photo_url: str(t.photoUrl),
       bio: str(t.bio), homeroom_class_id: nz(t.homeroomClass)
     });

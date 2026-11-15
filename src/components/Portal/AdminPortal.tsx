@@ -16,6 +16,7 @@ import {
   PortalAnnouncement,
   UserRole
 } from '../../types';
+import { TEACHER_SUBJECTS } from '../../utils/teacherSubjects';
 import {
   fetchAnnouncements,
   createAnnouncement as apiCreateAnnouncement,
@@ -222,15 +223,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
   // ---------------- TEACHERS STATE ----------------
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [searchTeacher, setSearchTeacher] = useState('');
-  const [filterDept, setFilterDept] = useState('Semua');
   const [isTeacherModalOpen, setIsTeacherModalOpen] = useState(false);
   const [editingTeacher, setEditingTeacher] = useState<Teacher | null>(null);
-  const [teacherForm, setTeacherForm] = useState({
+  const [teacherForm, setTeacherForm] = useState<Omit<Teacher, 'id'> & { homeroomClass: string }>({
     nip: '',
     fullName: '',
     degree: '',
     subject: '',
-    department: 'MIPA' as Teacher['department'],
     classesTaught: ['X-A'],
     homeroomClass: '',
     education: '',
@@ -299,15 +298,17 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
   const [galleryForm, setGalleryForm] = useState({
     title: '',
     category: 'Akademik' as GalleryPhoto['category'],
+    date: toDateInputValue(),
     description: '',
     photographer: 'Admin Sekolah'
   });
-  const [galleryFiles, setGalleryFiles] = useState<File[]>([]);
+  const [galleryPhotos, setGalleryPhotos] = useState<{ file: File; preview: string }[]>([]);
   const [isUploadingGallery, setIsUploadingGallery] = useState(false);
   const [editingGallery, setEditingGallery] = useState<GalleryPhoto | null>(null);
   const [galleryEditForm, setGalleryEditForm] = useState({
     title: '',
     category: 'Akademik' as GalleryPhoto['category'],
+    date: toDateInputValue(),
     description: '',
     photographer: ''
   });
@@ -336,7 +337,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
   const [editingKombelActivity, setEditingKombelActivity] = useState<KombelActivity | null>(null);
   const [kombelActivityForm, setKombelActivityForm] = useState({
     title: '',
-    date: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+    date: toDateInputValue(),
     image: '',
     description: '',
     speaker: '',
@@ -661,12 +662,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
 
   // ---------------- TEACHERS CRUD ----------------
   const filteredTeachers = teachers.filter(tch => {
-    const matchesDept = filterDept === 'Semua' || tch.department === filterDept;
     const matchesSearch =
       tch.fullName.toLowerCase().includes(searchTeacher.toLowerCase()) ||
       tch.nip.includes(searchTeacher) ||
       tch.subject.toLowerCase().includes(searchTeacher.toLowerCase());
-    return matchesDept && matchesSearch;
+    return matchesSearch;
   });
 
   const handleOpenAddTeacher = () => {
@@ -676,7 +676,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
       fullName: '',
       degree: 'S.Pd',
       subject: '',
-      department: 'MIPA',
       classesTaught: ['X-A'],
       homeroomClass: '',
       education: 'S1 Pendidikan, Universitas Khairun (Unkhair)',
@@ -695,7 +694,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
       fullName: tch.fullName,
       degree: tch.degree,
       subject: tch.subject,
-      department: tch.department,
       classesTaught: tch.classesTaught || [],
       homeroomClass: tch.homeroomClass || '',
       education: tch.education,
@@ -726,7 +724,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
   const handleSaveTeacher = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!teacherForm.fullName || !teacherForm.nip || !teacherForm.subject) return;
-
     try {
       if (editingTeacher) {
         const payload: Teacher = {
@@ -930,35 +927,61 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
   };
 
   // ---------------- PHOTO GALLERY ----------------
-  const handleUploadGallery = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!galleryForm.title || galleryFiles.length < 3 || galleryFiles.length > 5) {
-      alert('Isi nama kegiatan dan pilih 3 sampai 5 foto.');
+  const handleGalleryFilesChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    if (galleryPhotos.length + files.length > 5) {
+      alert('Maksimal 5 foto untuk satu album.');
+      e.target.value = '';
       return;
     }
-    if (galleryFiles.reduce((total, file) => total + file.size, 0) > 8 * 1024 * 1024) {
+    if (
+      files.some(file => !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) ||
+      [...galleryPhotos.map(photo => photo.file), ...files].reduce((total, file) => total + file.size, 0) > 8 * 1024 * 1024
+    ) {
+      alert('Gunakan foto JPG, PNG, atau WebP dengan ukuran total maksimal 8 MB.');
+      e.target.value = '';
+      return;
+    }
+    try {
+      const previews = await Promise.all(files.map(fileToDataUrl));
+      setGalleryPhotos(current => [
+        ...current,
+        ...files.map((file, index) => ({ file, preview: previews[index] }))
+      ]);
+      e.target.value = '';
+    } catch {
+      alert('Foto gagal dibaca. Silakan pilih ulang.');
+      e.target.value = '';
+    }
+  };
+
+  const handleUploadGallery = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!galleryForm.title || galleryPhotos.length < 1 || galleryPhotos.length > 5) {
+      alert('Isi nama kegiatan dan pilih 1 sampai 5 foto.');
+      return;
+    }
+    if (galleryPhotos.reduce((total, photo) => total + photo.file.size, 0) > 8 * 1024 * 1024) {
       alert('Ukuran total foto maksimal 8 MB.');
       return;
     }
     setIsUploadingGallery(true);
     try {
-      const images = await Promise.all(galleryFiles.map(fileToDataUrl));
+      const images = galleryPhotos.map(photo => photo.preview);
       const created = await createGalleryPhoto({
         ...galleryForm,
+        date: formatAnnouncementDate(galleryForm.date),
         image: images[0],
         additionalImages: images.slice(1),
-        date: new Date().toLocaleDateString('id-ID', {
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric'
-        }),
         createdAt: new Date().toISOString()
       });
       setGalleryItems(prev => [created, ...prev]);
-      setGalleryFiles([]);
+      setGalleryPhotos([]);
       setGalleryForm({
         title: '',
         category: 'Akademik',
+        date: toDateInputValue(),
         description: '',
         photographer: 'Admin Sekolah'
       });
@@ -1052,6 +1075,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
     setGalleryEditForm({
       title: item.title,
       category: item.category,
+      date: announcementDateToInputValue(item.date),
       description: item.description,
       photographer: item.photographer
     });
@@ -1062,8 +1086,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
   const handleSaveGalleryEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingGallery) return;
-    if (galleryAdditionalFiles.length > 0 && (galleryAdditionalFiles.length < 3 || galleryAdditionalFiles.length > 5)) {
-      alert('Pilih 3 sampai 5 foto baru, atau kosongkan jika hanya mengubah detail kegiatan.');
+    const existingPhotoCount = 1 + (editingGallery.additionalImages?.length || 0);
+    if (existingPhotoCount + galleryAdditionalFiles.length > 5) {
+      alert('Album maksimal 5 foto. Kurangi foto tambahan atau hapus foto lama terlebih dahulu.');
       return;
     }
     const selectedFiles = [...(galleryCoverFile ? [galleryCoverFile] : []), ...galleryAdditionalFiles];
@@ -1085,6 +1110,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
       const updated = await updateGalleryPhoto({
         ...editingGallery,
         ...galleryEditForm,
+        date: formatAnnouncementDate(galleryEditForm.date),
         image,
         additionalImages: [...(editingGallery.additionalImages || []), ...additionalImages]
       });
@@ -1185,11 +1211,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
     setEditingKombelActivity(null);
     setKombelActivityForm({
       title: '',
-      date: new Date().toLocaleDateString('id-ID', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric'
-      }),
+      date: toDateInputValue(),
       image: '',
       description: '',
       speaker: 'Lukman Hi. Saleh, S.Pd',
@@ -1203,7 +1225,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
     setEditingKombelActivity(act);
     setKombelActivityForm({
       title: act.title,
-      date: act.date,
+      date: announcementDateToInputValue(act.date),
       image: act.image || '',
       description: act.description,
       speaker: act.speaker || '',
@@ -1252,6 +1274,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
         const payload: KombelActivity = {
           ...editingKombelActivity,
           ...kombelActivityForm,
+          date: formatAnnouncementDate(kombelActivityForm.date),
           image: kombelActivityImages[0],
           additionalImages: kombelActivityImages.slice(1)
         };
@@ -1260,6 +1283,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
       } else {
         const created = await createKombelActivity({
           ...kombelActivityForm,
+          date: formatAnnouncementDate(kombelActivityForm.date),
           image: kombelActivityImages[0],
           additionalImages: kombelActivityImages.slice(1)
         });
@@ -2108,19 +2132,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                 />
               </div>
 
-              <select
-                value={filterDept}
-                onChange={e => setFilterDept(e.target.value)}
-                className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-700 focus:ring-2 focus:ring-blue-900 focus:outline-none"
-              >
-                <option value="Semua">Semua Rumpun/Departemen</option>
-                <option value="MIPA">MIPA</option>
-                <option value="IPS">IPS</option>
-                <option value="Bahasa">Bahasa</option>
-                <option value="Informatika">Informatika</option>
-                <option value="Seni & Olahraga">Seni & Olahraga</option>
-                <option value="BK">Bimbingan Konseling (BK)</option>
-              </select>
             </div>
 
             <div className="flex flex-wrap items-center justify-end gap-2">
@@ -2159,8 +2170,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                     <th className="py-3 px-3 w-10 text-center">No</th>
                     <th className="py-3 px-4">Nama Lengkap & Gelar</th>
                     <th className="py-3 px-3">NIP</th>
-                    <th className="py-3 px-3">Mata Pelajaran</th>
-                    <th className="py-3 px-3">Rumpun</th>
+                    <th className="py-3 px-3">Mata Pelajaran / Jabatan</th>
                     <th className="py-3 px-3">Pendidikan Terakhir</th>
                     <th className="py-3 px-3">Kontak</th>
                     <th className="py-3 px-4 text-right">Aksi</th>
@@ -2169,7 +2179,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                 <tbody className="divide-y divide-slate-200 font-sans">
                   {filteredTeachers.length === 0 ? (
                     <tr>
-                      <td colSpan={isBulkMode('teachers') ? 9 : 8} className="py-8 text-center text-slate-400">
+                      <td colSpan={isBulkMode('teachers') ? 8 : 7} className="py-8 text-center text-slate-400">
                         Tidak ada guru ditemukan dengan kriteria tersebut.
                       </td>
                     </tr>
@@ -2201,11 +2211,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                         </td>
                         <td className="py-3 px-3 font-mono text-slate-600">{tch.nip.replace(/\s+/g, '')}</td>
                         <td className="py-3 px-3 font-medium text-slate-800">{tch.subject}</td>
-                        <td className="py-3 px-3">
-                          <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-800 border border-blue-200">
-                            {tch.department}
-                          </span>
-                        </td>
                         <td className="py-3 px-3 text-slate-600 text-[11px] max-w-[180px] truncate">
                           {tch.education}
                         </td>
@@ -2619,7 +2624,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
               </div>
             </div>
             <form onSubmit={handleUploadGallery} className="space-y-4">
-              <div className="grid md:grid-cols-2 gap-4">
+              <div className="grid gap-4 md:grid-cols-3">
                 <div className="space-y-1">
                   <label className="text-xs font-semibold text-slate-700">
                     Judul / Nama Kegiatan <span className="text-rose-500">*</span>
@@ -2651,32 +2656,66 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                     <option>Upacara</option>
                   </select>
                 </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-700">
+                    Tanggal Kegiatan <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    required
+                    type="date"
+                    lang="id"
+                    value={galleryForm.date}
+                    onChange={e => setGalleryForm({ ...galleryForm, date: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs"
+                  />
+                  <p className="text-[11px] text-slate-500">{formatAnnouncementDate(galleryForm.date)}</p>
+                </div>
               </div>
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-700">Fotografer / Dokumentasi</label>
-                  <input
-                    value={galleryForm.photographer}
-                    onChange={e => setGalleryForm({ ...galleryForm, photographer: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg"
-                  />
-                </div>
-                <div className="space-y-1">
                   <label className="text-xs font-semibold text-slate-700">
-                    Pilih 3–5 Foto Kegiatan <span className="text-rose-500">*</span>
+                    Pilih 1–5 Foto Kegiatan <span className="text-rose-500">*</span>
                   </label>
                   <input
                     id="gallery-files-input"
-                    required
                     type="file"
                     multiple
                     accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/jpg,image/png,image/webp"
-                    onChange={e => setGalleryFiles(Array.from(e.target.files || []))}
+                    onChange={handleGalleryFilesChange}
+                    disabled={isUploadingGallery}
                     className="w-full text-xs border border-slate-300 rounded-lg p-2 bg-white"
                   />
-                  <p className="text-[11px] text-slate-500">Satu kegiatan disimpan sebagai satu album. Maksimal 8 MB total.</p>
+                  <p className="text-[11px] text-slate-500">
+                    Pilih 1–5 foto untuk satu album. Maksimal 8 MB total.
+                  </p>
                 </div>
               </div>
+              {galleryPhotos.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-slate-700">Pratinjau Foto</p>
+                  <div className="flex gap-2 overflow-x-auto py-2">
+                    {galleryPhotos.map(({ preview, file }, index) => (
+                      <div key={`${file.name}-${file.lastModified}-${index}`} className="relative h-14 w-20 shrink-0">
+                        <img
+                          src={preview}
+                          alt={`Pratinjau foto ${index + 1}`}
+                          className="h-full w-full rounded border border-slate-200 object-cover"
+                        />
+                        <button
+                          type="button"
+                          aria-label={`Hapus foto ${index + 1}`}
+                          title="Hapus foto ini"
+                          disabled={isUploadingGallery}
+                          onClick={() => setGalleryPhotos(current => current.filter((_, photoIndex) => photoIndex !== index))}
+                          className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-rose-600 text-sm font-bold leading-none text-white shadow hover:bg-rose-700 disabled:opacity-50"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <textarea
                 rows={3}
                 value={galleryForm.description}
@@ -2691,7 +2730,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                 <ImagePlus className="w-4 h-4" />{' '}
                 {isUploadingGallery
                   ? 'Mengunggah ke server...'
-                  : `Upload ${galleryFiles.length ? galleryFiles.length + ' Foto' : 'Foto'}`}
+                  : `Upload ${galleryPhotos.length ? galleryPhotos.length + ' Foto' : 'Foto'}`}
               </button>
             </form>
           </div>
@@ -2781,7 +2820,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                 </div>
 
                 <form onSubmit={handleSaveGalleryEdit} className="space-y-4">
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-4 sm:grid-cols-3">
                     <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-700">Nama Kegiatan</label>
                       <input
@@ -2806,14 +2845,17 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                         <option>Upacara</option>
                       </select>
                     </div>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-700">Fotografer / Dokumentasi</label>
-                    <input
-                      value={galleryEditForm.photographer}
-                      onChange={e => setGalleryEditForm({ ...galleryEditForm, photographer: e.target.value })}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                    />
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-slate-700">Tanggal Kegiatan</label>
+                      <input
+                        required
+                        type="date"
+                        value={galleryEditForm.date}
+                        onChange={e => setGalleryEditForm({ ...galleryEditForm, date: e.target.value })}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                      />
+                      <p className="text-[11px] text-slate-500">{formatAnnouncementDate(galleryEditForm.date)}</p>
+                    </div>
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs font-semibold text-slate-700">Deskripsi</label>
@@ -2835,7 +2877,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs font-semibold text-slate-700">Tambah 3–5 Foto (opsional)</label>
+                      <label className="text-xs font-semibold text-slate-700">Tambah Foto (opsional, maksimal 5 foto per album)</label>
                       <input
                         type="file"
                         multiple
@@ -2843,7 +2885,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                         onChange={e => setGalleryAdditionalFiles(Array.from(e.target.files || []))}
                         className="w-full rounded-lg border border-slate-300 bg-white p-2 text-xs"
                       />
-                      <p className="text-[11px] text-slate-500">Pilih 3–5 foto baru. Total ukuran foto baru maksimal 8 MB.</p>
+                      <p className="text-[11px] text-slate-500">Album dapat berisi 1–5 foto. Total ukuran foto baru maksimal 8 MB.</p>
                     </div>
                   </div>
                   <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
@@ -4028,30 +4070,25 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
                   <label className="text-xs font-semibold text-slate-700">
-                    Mata Pelajaran Utama <span className="text-rose-500">*</span>
+                    Mata Pelajaran / Jabatan <span className="text-rose-500">*</span>
                   </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Contoh: Kimia & Praktikum Sains"
-                    value={teacherForm.subject}
-                    onChange={e => setTeacherForm({ ...teacherForm, subject: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-700">Rumpun Departemen</label>
                   <select
-                    value={teacherForm.department}
-                    onChange={e => setTeacherForm({ ...teacherForm, department: e.target.value as any })}
+                    required
+                    value={teacherForm.subject}
+                    onChange={e => {
+                      setTeacherForm({ ...teacherForm, subject: e.target.value });
+                    }}
                     className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
                   >
-                    <option value="MIPA">MIPA</option>
-                    <option value="IPS">IPS</option>
-                    <option value="Bahasa">Bahasa</option>
-                    <option value="Informatika">Informatika</option>
-                    <option value="Seni & Olahraga">Seni & Olahraga</option>
-                    <option value="BK">Bimbingan Konseling (BK)</option>
+                    <option value="" disabled>Pilih jabatan atau mata pelajaran</option>
+                    {teacherForm.subject && !TEACHER_SUBJECTS.some(item => item.subject === teacherForm.subject) && (
+                      <option value={teacherForm.subject}>Data lama: {teacherForm.subject}</option>
+                    )}
+                    {TEACHER_SUBJECTS.map(assignment => (
+                      <option key={assignment.subject} value={assignment.subject}>
+                        {assignment.title}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -4483,12 +4520,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                 <div className="space-y-1">
                   <label className="text-xs font-semibold text-slate-700">Tanggal Pelaksanaan</label>
                   <input
-                    type="text"
+                    type="date"
                     required
+                    lang="id"
                     value={kombelActivityForm.date}
                     onChange={e => setKombelActivityForm({ ...kombelActivityForm, date: e.target.value })}
+                    onFocus={e => e.currentTarget.showPicker()}
                     className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg"
                   />
+                  <p className="text-[11px] text-slate-500">{formatAnnouncementDate(kombelActivityForm.date)}</p>
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs font-semibold text-slate-700">Jumlah Guru Hadir</label>

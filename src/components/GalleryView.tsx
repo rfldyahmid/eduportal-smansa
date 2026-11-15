@@ -359,8 +359,6 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ onNavigate, currentUse
                 <span className="font-bold text-blue-900 bg-blue-50 px-2.5 py-1 rounded">{activePhoto.category}</span>
                 <span>·</span>
                 <span className="font-mono">{activePhoto.date}</span>
-                <span>·</span>
-                <span>Fotografer: {activePhoto.photographer}</span>
               </div>
               <h3 className="font-serif-title text-xl font-bold text-slate-900">{activePhoto.title}</h3>
               <p className="text-xs sm:text-sm text-slate-600 leading-relaxed whitespace-pre-line">{activePhoto.description}</p>
