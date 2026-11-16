@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { UserAccount } from '../types';
 import { fetchAnnouncements, fetchStudentNotificationReads } from '../utils/api';
-import { Menu, X, User, LogOut, ChevronRight, Bell, LayoutDashboard, Moon, Sun, Mail, Phone } from 'lucide-react';
+import { Menu, X, User, LogOut, ChevronRight, Bell, LayoutDashboard, Moon, Sun } from 'lucide-react';
 import { IMAGES } from '../assets/images';
 
 interface HeaderProps {
@@ -186,17 +186,6 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
             </button>
 
-            <div className="hidden shrink-0 items-center gap-3 rounded-xl border border-white/80 bg-white/70 px-4 py-2 text-[11px] text-slate-600 shadow-sm backdrop-blur-sm lg:flex xl:gap-5 xl:text-xs dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-slate-300">
-              <a href="mailto:humas@sman1halteng.sch.id" className="inline-flex items-center gap-1.5 whitespace-nowrap transition-colors hover:text-blue-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-700 dark:hover:text-sky-300">
-                <Mail className="h-3.5 w-3.5 shrink-0 text-blue-900 dark:text-sky-300" />
-                <span>humas@sman1halteng.sch.id</span>
-              </a>
-              <span aria-hidden="true" className="h-5 w-px bg-slate-200 dark:bg-slate-700" />
-              <a href="tel:+629213120045" className="inline-flex items-center gap-1.5 whitespace-nowrap transition-colors hover:text-blue-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-700 dark:hover:text-sky-300">
-                <Phone className="h-3.5 w-3.5 shrink-0 text-blue-900 dark:text-sky-300" />
-                <span>Sekretariat (0921) 312-0045</span>
-              </a>
-            </div>
           </div>
         </div>
       </div>
@@ -253,7 +242,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </>
               ) : (
                 <button onClick={onOpenAuth} className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-amber-400 px-3 py-2 text-xs font-semibold text-blue-950 shadow-sm transition-colors hover:bg-amber-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-200">
-                  <User className="h-3.5 w-3.5" /><span>Login</span>
+                  <User className="h-3.5 w-3.5" /><span>Login Siswa & Guru</span>
                 </button>
               )}
               <button
@@ -279,7 +268,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               </>
             ) : (
-              <button onClick={onOpenAuth} aria-label="Login" className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-amber-400 text-blue-950 transition-colors hover:bg-amber-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-200">
+              <button onClick={onOpenAuth} aria-label="Login Siswa & Guru" title="Login Siswa & Guru" className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-amber-400 text-blue-950 transition-colors hover:bg-amber-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-200">
                 <User className="h-4 w-4" />
               </button>
             )}

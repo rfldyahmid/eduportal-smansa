@@ -1,4 +1,5 @@
 export type UserRole = 'siswa' | 'guru' | 'admin' | 'kepala_sekolah' | 'ketua_kombel';
+export type Gender = 'Laki-laki' | 'Perempuan';
 
 export interface UserAccount {
   id: string;
@@ -9,6 +10,7 @@ export interface UserAccount {
   fullName: string;
   email: string;
   avatarUrl?: string;
+  gender?: Gender;
   linkedId?: string; // Links to studentId or teacherId
   mustChangePassword?: boolean;
 }
@@ -19,7 +21,7 @@ export interface Student {
   nis: string;
   fullName: string;
   email?: string;
-  gender: 'Laki-laki' | 'Perempuan';
+  gender: Gender;
   classId: string; // e.g. "X-A", "XI-B", "XII-E"
   className: string;
   academicYear: string;
@@ -126,6 +128,12 @@ export interface PortalAnnouncement {
   teacherName: string;
   createdAt: string;
   isImportant?: boolean;
+  imageUrl?: string;
+  imageName?: string;
+  fileUrl?: string;
+  fileName?: string;
+  fileMimeType?: string;
+  fileSize?: number;
 }
 
 export interface SubjectAnnouncement {

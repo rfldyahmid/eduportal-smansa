@@ -15,8 +15,16 @@ import { StudentPortal } from './components/Portal/StudentPortal';
 import { TeacherPortal } from './components/Portal/TeacherPortal';
 import { AdminPortal } from './components/Portal/AdminPortal';
 import { apiGetMe, hasAuthToken } from './utils/api';
-
 import { KombelView } from './components/KombelView';
+import { getProfileAvatar } from './utils/profileAvatar';
+
+const userRoleLabels: Record<UserAccount['role'], string> = {
+  siswa: 'Siswa',
+  guru: 'Guru',
+  admin: 'Admin',
+  kepala_sekolah: 'Kepala Sekolah',
+  ketua_kombel: 'Ketua KOMBEL'
+};
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<string>('beranda');
@@ -119,7 +127,6 @@ export default function App() {
         {currentTab === 'beranda' && (
           <HomeView
             onNavigate={handleNavigate}
-            onOpenPortal={handleOpenPortal}
           />
         )}
 
@@ -170,6 +177,25 @@ export default function App() {
         {/* Integrated Academic Portal */}
         {currentTab === 'portal' && currentUser && (
           <div>
+            {currentUser.role !== 'siswa' && currentUser.role !== 'guru' && currentUser.role !== 'ketua_kombel' && (
+              <div className="mx-auto w-full max-w-7xl px-3 pt-6 sm:px-8 sm:pt-8">
+                <div className="inline-flex max-w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+                  <img
+                    src={getProfileAvatar(currentUser)}
+                    alt={currentUser.avatarUrl ? `Foto profil ${currentUser.fullName}` : `Avatar profil ${currentUser.gender || 'pengguna'}`}
+                    className="h-11 w-11 shrink-0 rounded-full border border-slate-200 bg-slate-100 object-cover sm:h-12 sm:w-12"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-blue-900">
+                      Selamat datang, {userRoleLabels[currentUser.role]}
+                    </p>
+                    <h1 className="mt-1 break-words text-xl font-bold text-slate-900 sm:text-2xl">
+                      {currentUser.fullName.trim() || currentUser.username}
+                    </h1>
+                  </div>
+                </div>
+              </div>
+            )}
             {currentUser.role === 'siswa' && (
               <StudentPortal
                 currentUser={currentUser}
@@ -180,7 +206,6 @@ export default function App() {
             {(currentUser.role === 'guru' || currentUser.role === 'ketua_kombel') && (
               <TeacherPortal
                 currentUser={currentUser}
-                onLogout={handleLogout}
                 onNavigate={handleNavigate}
               />
             )}

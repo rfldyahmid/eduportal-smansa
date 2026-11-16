@@ -42,6 +42,7 @@ import type {
   AssignmentSubmission,
   PortalAnnouncement,
   UserAccount,
+  Gender,
   UserRole,
   PasswordResetRequest
 } from './src/types/index';
@@ -57,6 +58,7 @@ const PORT = Number(process.env.PORT || 3000);
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 const configuredJwtSecret = process.env.ADMIN_SECRET || process.env.JWT_SECRET || '';
 const hasPlaceholderSecret = /^(ganti|change|your|example|placeholder)/i.test(configuredJwtSecret);
+const isGender = (value: unknown): value is Gender => value === 'Laki-laki' || value === 'Perempuan';
 
 if (
   IS_PRODUCTION &&
@@ -144,6 +146,46 @@ const upload = multer({
   }
 });
 
+const announcementFileTypes: Record<string, string[]> = {
+  '.jpg': ['image/jpeg'],
+  '.jpeg': ['image/jpeg'],
+  '.png': ['image/png'],
+  '.webp': ['image/webp'],
+  '.pdf': ['application/pdf'],
+  '.doc': ['application/msword'],
+  '.docx': ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+  '.xls': ['application/vnd.ms-excel'],
+  '.xlsx': ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+  '.ppt': ['application/vnd.ms-powerpoint'],
+  '.pptx': ['application/vnd.openxmlformats-officedocument.presentationml.presentation'],
+  '.txt': ['text/plain'],
+  '.csv': ['text/csv', 'application/vnd.ms-excel']
+};
+const announcementUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const extension = path.extname(file.originalname).toLowerCase();
+    const allowedMimeTypes = announcementFileTypes[extension];
+    const isImageField = file.fieldname === 'image' && file.mimetype.startsWith('image/');
+    const isDocumentField = file.fieldname === 'file' && !file.mimetype.startsWith('image/');
+    if (allowedMimeTypes?.includes(file.mimetype) && (isImageField || isDocumentField)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Format lampiran tidak didukung.'));
+    }
+  }
+});
+const handlePortalAnnouncementUploads: import('express').RequestHandler = (req, res, next) => {
+  announcementUpload.fields([{ name: 'image', maxCount: 1 }, { name: 'file', maxCount: 1 }])(req, res, error => {
+    if (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Lampiran tidak dapat diunggah.' });
+      return;
+    }
+    next();
+  });
+};
+
 // Robust in-memory rate limiter for failed login attempts
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
 const publicActionAttempts = new Map<string, { count: number; resetAt: number }>();
@@ -218,9 +260,9 @@ async function persistImage(dataUrl: string, prefix: string): Promise<string> {
   return `/uploads/${filename}`;
 }
 
-async function persistUploadedFile(file: Express.Multer.File): Promise<string> {
+async function persistUploadedFile(file: Express.Multer.File, prefix = 'submission'): Promise<string> {
   const ext = path.extname(file.originalname).replace(/[^.a-zA-Z0-9]/g, '').slice(0, 16);
-  const filename = `submission-${Date.now()}-${crypto.randomBytes(12).toString('hex')}${ext}`;
+  const filename = `${prefix}-${Date.now()}-${crypto.randomBytes(12).toString('hex')}${ext}`;
   await pool.query(
     'INSERT INTO uploaded_files (id, original_name, mime_type, size_bytes, content) VALUES ($1, $2, $3, $4, $5)',
     [filename, path.basename(file.originalname), file.mimetype, file.size, file.buffer]
@@ -313,6 +355,7 @@ app.post('/api/auth/login', async (req, res) => {
       fullName: user.fullName,
       email: user.email,
       avatarUrl: user.avatarUrl,
+      gender: user.gender,
       linkedId: user.linkedId,
       mustChangePassword: user.mustChangePassword
     }
@@ -588,6 +631,7 @@ app.get('/api/auth/me', requireAuth, async (req: AuthenticatedRequest, res) => {
     fullName: user.fullName,
     email: user.email,
     avatarUrl: user.avatarUrl,
+    gender: user.gender,
     linkedId: user.linkedId,
     mustChangePassword: user.mustChangePassword
   });
@@ -634,6 +678,7 @@ app.post('/api/auth/change-password', requireAuth, async (req: AuthenticatedRequ
       fullName: updatedUser.fullName,
       email: updatedUser.email,
       avatarUrl: updatedUser.avatarUrl,
+      gender: updatedUser.gender,
       linkedId: updatedUser.linkedId,
       mustChangePassword: false
     }
@@ -800,6 +845,9 @@ app.post('/api/users', requireAdmin, async (req: AuthenticatedRequest, res) => {
   if (!username || username.length > 100 || !fullName || fullName.length > 160 || !validRoles.includes(role)) {
     return res.status(400).json({ message: 'Username, nama lengkap, dan peran yang valid wajib diisi.' });
   }
+  if (role !== 'siswa' && !isGender(body.gender)) {
+    return res.status(400).json({ message: 'Jenis kelamin wajib dipilih untuk akun non-siswa.' });
+  }
   if (email && (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
     return res.status(400).json({ message: 'Format email tidak valid.' });
   }
@@ -813,12 +861,14 @@ app.post('/api/users', requireAdmin, async (req: AuthenticatedRequest, res) => {
   let accountName = fullName;
   let accountEmail = email;
   let avatarUrl: string | undefined;
+  let gender: Gender | undefined;
   if (role === 'siswa') {
     const student = db.students.find(item => item.nisn.toLowerCase() === username.toLowerCase());
     if (!student) return res.status(400).json({ message: 'Akun siswa harus dibuat dari data siswa, atau username harus sama dengan NISN siswa yang sudah terdaftar.' });
     linkedId = student.id;
     accountName = student.fullName;
     accountEmail = student.email || email;
+    gender = student.gender;
   } else if (['guru', 'kepala_sekolah', 'ketua_kombel'].includes(role)) {
     const teacher = db.teachers.find(item => item.nip.toLowerCase() === username.toLowerCase());
     if (role === 'guru' && !teacher) return res.status(400).json({ message: 'Akun guru harus dibuat dari data guru, atau username harus sama dengan NIP guru yang sudah terdaftar.' });
@@ -828,6 +878,9 @@ app.post('/api/users', requireAdmin, async (req: AuthenticatedRequest, res) => {
       accountEmail = teacher.email || email;
       avatarUrl = teacher.photoUrl;
     }
+    gender = body.gender;
+  } else {
+    gender = body.gender;
   }
 
   const temporaryPassword = crypto.randomBytes(18).toString('base64url');
@@ -842,6 +895,7 @@ app.post('/api/users', requireAdmin, async (req: AuthenticatedRequest, res) => {
     email: accountEmail,
     linkedId,
     avatarUrl,
+    gender,
     mustChangePassword: true
   };
   db.users.push(user);
@@ -863,6 +917,9 @@ app.put('/api/users/:id', requireAdmin, async (req: AuthenticatedRequest, res) =
   const validRoles: UserRole[] = ['siswa', 'guru', 'admin', 'kepala_sekolah', 'ketua_kombel'];
   if (!username || username.length > 100 || !fullName || fullName.length > 160 || !validRoles.includes(role)) {
     return res.status(400).json({ message: 'Username, nama lengkap, dan peran yang valid wajib diisi.' });
+  }
+  if (role !== 'siswa' && !isGender(body.gender)) {
+    return res.status(400).json({ message: 'Jenis kelamin wajib dipilih untuk akun non-siswa.' });
   }
   if (email && (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
     return res.status(400).json({ message: 'Format email tidak valid.' });
@@ -890,11 +947,14 @@ app.put('/api/users/:id', requireAdmin, async (req: AuthenticatedRequest, res) =
   if (linkedTeacher && db.teachers.some(item => item.id !== linkedTeacher.id && item.nip.toLowerCase() === username.toLowerCase())) {
     return res.status(409).json({ message: 'NIP tersebut sudah dipakai profil guru lain.' });
   }
+  const gender = linkedStudent?.gender || (isGender(body.gender) ? body.gender : user.gender);
+  if (!gender) return res.status(400).json({ message: 'Jenis kelamin wajib dipilih.' });
 
   user.username = username;
   user.fullName = fullName;
   user.email = email;
   user.role = role;
+  user.gender = gender;
   if (linkedStudent) {
     linkedStudent.nisn = username;
     linkedStudent.fullName = fullName;
@@ -1071,7 +1131,7 @@ app.post('/api/users/provision-linked-accounts', requireAdmin, async (_req, res)
   const conflicts: { fullName: string; role: 'siswa' | 'guru'; username: string }[] = [];
   let updatedLinks = false;
 
-  const provision = (person: Student | Teacher, role: 'siswa' | 'guru', username: string, email: string, avatarUrl?: string) => {
+  const provision = (person: Student | Teacher, role: 'siswa' | 'guru', username: string, email: string, avatarUrl?: string, gender?: Gender) => {
     const linked = db.users.find(user => user.linkedId === person.id);
     const sameUsername = db.users.find(user => user.username.toLowerCase() === username.toLowerCase());
     const isCompatible = (account: UserAccount) => role === 'siswa'
@@ -1089,6 +1149,7 @@ app.post('/api/users/provision-linked-accounts', requireAdmin, async (_req, res)
         sameUsername.fullName = person.fullName;
         sameUsername.email = email;
         if (avatarUrl) sameUsername.avatarUrl = avatarUrl;
+        if (gender) sameUsername.gender = gender;
         updatedLinks = true;
         return;
       }
@@ -1110,13 +1171,14 @@ app.post('/api/users/provision-linked-accounts', requireAdmin, async (_req, res)
       email,
       linkedId: person.id,
       avatarUrl,
+      gender,
       mustChangePassword: true
     });
     created.push({ fullName: person.fullName, role, username, temporaryPassword });
   };
 
   for (const student of db.students) {
-    provision(student, 'siswa', student.nisn, student.email || '', undefined);
+    provision(student, 'siswa', student.nisn, student.email || '', undefined, student.gender);
   }
   for (const teacher of db.teachers) {
     provision(teacher, 'guru', teacher.nip, teacher.email || '', teacher.photoUrl);
@@ -1966,7 +2028,7 @@ app.post('/api/students', requireAdmin, async (req, res) => {
       fullName: item.fullName,
       email: item.email || '',
       linkedId: item.id,
-      avatarUrl: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=200',
+      gender: item.gender,
       mustChangePassword: true
     });
 
@@ -2002,6 +2064,7 @@ app.put('/api/students/:id', requireAdmin, async (req, res) => {
   if (user) {
     user.fullName = db.students[index].fullName;
     user.email = String(db.students[index].email || '').trim();
+    user.gender = db.students[index].gender;
   }
 
   await saveDb();
@@ -2080,31 +2143,81 @@ app.get('/api/portal-announcements', requireAuth, async (_req, res) => {
   res.json(db.portalAnnouncements);
 });
 
-app.post('/api/portal-announcements', requireStaff, async (req: AuthenticatedRequest, res) => {
-  const body = req.body || {};
-  if (!body.title || !body.content) {
-    return res.status(400).json({ message: 'Judul dan isi pengumuman wajib diisi.' });
+function readPortalAnnouncementPayload(req: AuthenticatedRequest): Record<string, unknown> | null {
+  const rawPayload = req.body?.announcement ?? req.body;
+  let payload: unknown = rawPayload;
+  if (typeof rawPayload === 'string') {
+    try {
+      payload = JSON.parse(rawPayload);
+    } catch {
+      return null;
+    }
+  }
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  return payload as Record<string, unknown>;
+}
+
+function validatePortalAnnouncementPayload(body: Record<string, unknown>) {
+  const title = typeof body.title === 'string' ? body.title.trim() : '';
+  const content = typeof body.content === 'string' ? body.content.trim() : '';
+  if (!title || !content) return { error: 'Judul dan isi pengumuman wajib diisi.' } as const;
+
+  const categories: PortalAnnouncement['category'][] = ['Umum', 'Kelas X', 'Kelas XI', 'Kelas XII'];
+  const category = body.category;
+  if (typeof category !== 'string' || !categories.includes(category as PortalAnnouncement['category'])) {
+    return { error: 'Sasaran pengumuman tidak valid.' } as const;
   }
 
+  const rawTargetClass = typeof body.targetClass === 'string' ? body.targetClass.trim() : '';
+  const targetClass = rawTargetClass ? normalizeSchoolClassId(rawTargetClass) : undefined;
+  const gradePrefix = category === 'Kelas X' ? 'X-' : category === 'Kelas XI' ? 'XI-' : category === 'Kelas XII' ? 'XII-' : '';
+  if (targetClass && (!isSchoolClass(targetClass) || !gradePrefix || !targetClass.startsWith(gradePrefix))) {
+    return { error: 'Kelas sasaran tidak sesuai dengan kategori yang dipilih.' } as const;
+  }
+
+  return {
+    title,
+    content,
+    category: category as PortalAnnouncement['category'],
+    targetClass,
+    isImportant: Boolean(body.isImportant)
+  } as const;
+}
+
+function getPortalAnnouncementFiles(req: AuthenticatedRequest) {
+  const files = req.files as Record<string, Express.Multer.File[]> | undefined;
+  return { image: files?.image?.[0], file: files?.file?.[0] };
+}
+
+app.post('/api/portal-announcements', requireStaff, handlePortalAnnouncementUploads, async (req: AuthenticatedRequest, res) => {
+  const body = readPortalAnnouncementPayload(req);
+  if (!body) return res.status(400).json({ message: 'Data pengumuman tidak valid.' });
+  const fields = validatePortalAnnouncementPayload(body);
+  if ('error' in fields) return res.status(400).json({ message: fields.error });
+  const { image, file } = getPortalAnnouncementFiles(req);
+  const imageUrl = image ? await persistUploadedFile(image, 'announcement-image') : undefined;
+  const fileUrl = file ? await persistUploadedFile(file, 'announcement-file') : undefined;
   const db = await getDb();
   const teacher = db.teachers.find(item => item.id === req.user?.linkedId || item.nip === req.user?.username);
   const item: PortalAnnouncement = {
     id: `pa-${Date.now()}`,
-    title: String(body.title).trim(),
-    category: body.category || 'Umum',
-    targetClass: body.targetClass,
-    content: String(body.content).trim(),
+    ...fields,
     teacherId: teacher?.id || req.user?.linkedId || '',
     teacherName: teacher?.fullName || req.user?.fullName || 'Guru',
     createdAt: new Date().toISOString(),
-    isImportant: Boolean(body.isImportant)
+    imageUrl,
+    imageName: image ? path.basename(image.originalname) : undefined,
+    fileUrl,
+    fileName: file ? path.basename(file.originalname) : undefined,
+    fileMimeType: file?.mimetype,
+    fileSize: file?.size
   };
   db.portalAnnouncements.unshift(item);
   await saveDb();
   res.status(201).json(item);
 });
 
-app.put('/api/portal-announcements/:id', requireStaff, async (req: AuthenticatedRequest, res) => {
+app.put('/api/portal-announcements/:id', requireStaff, handlePortalAnnouncementUploads, async (req: AuthenticatedRequest, res) => {
   const db = await getDb();
   const index = db.portalAnnouncements.findIndex(item => item.id === req.params.id);
   if (index < 0) return res.status(404).json({ message: 'Pengumuman portal tidak ditemukan.' });
@@ -2114,15 +2227,28 @@ app.put('/api/portal-announcements/:id', requireStaff, async (req: Authenticated
     return res.status(403).json({ message: 'Anda tidak memiliki akses ke pengumuman ini.' });
   }
 
-  db.portalAnnouncements[index] = {
+  const body = readPortalAnnouncementPayload(req);
+  if (!body) return res.status(400).json({ message: 'Data pengumuman tidak valid.' });
+  const fields = validatePortalAnnouncementPayload(body);
+  if ('error' in fields) return res.status(400).json({ message: fields.error });
+  const { image, file } = getPortalAnnouncementFiles(req);
+  const imageUrl = image ? await persistUploadedFile(image, 'announcement-image') : existing.imageUrl;
+  const fileUrl = file ? await persistUploadedFile(file, 'announcement-file') : existing.fileUrl;
+  const updated: PortalAnnouncement = {
     ...existing,
-    ...req.body,
-    id: existing.id,
-    teacherId: existing.teacherId,
-    teacherName: existing.teacherName
+    ...fields,
+    imageUrl,
+    imageName: image ? path.basename(image.originalname) : existing.imageName,
+    fileUrl,
+    fileName: file ? path.basename(file.originalname) : existing.fileName,
+    fileMimeType: file?.mimetype || existing.fileMimeType,
+    fileSize: file?.size || existing.fileSize
   };
+  db.portalAnnouncements[index] = updated;
   await saveDb();
-  res.json(db.portalAnnouncements[index]);
+  if (image && existing.imageUrl) await safeDeleteImage(existing.imageUrl);
+  if (file && existing.fileUrl) await safeDeleteImage(existing.fileUrl);
+  res.json(updated);
 });
 
 app.delete('/api/portal-announcements/:id', requireStaff, async (req: AuthenticatedRequest, res) => {
@@ -2136,6 +2262,8 @@ app.delete('/api/portal-announcements/:id', requireStaff, async (req: Authentica
 
   db.portalAnnouncements = db.portalAnnouncements.filter(item => item.id !== req.params.id);
   await saveDb();
+  await safeDeleteImage(existing.imageUrl);
+  await safeDeleteImage(existing.fileUrl);
   res.status(204).end();
 });
 

@@ -3,7 +3,6 @@ import {
   CalendarDays,
   ClipboardList,
   Megaphone,
-  LogOut,
   User,
   Clock3,
   MapPin,
@@ -20,6 +19,8 @@ import {
 import { Student, UserAccount, ScheduleItem, Assignment, PortalAnnouncement, AssignmentSubmission } from '../../types';
 import { fetchMyStudentProfile, fetchStudentNotificationReads, markStudentNotificationsRead, fetchAssignments, fetchPortalAnnouncements, fetchSubmissions, submitAssignment, fetchSchedules } from '../../utils/api';
 import { PrintScheduleModal } from '../PrintScheduleModal';
+import { getProfileAvatar } from '../../utils/profileAvatar';
+import { PortalAnnouncementAttachments } from './PortalAnnouncementAttachments';
 
 interface StudentPortalProps {
   currentUser: UserAccount;
@@ -149,11 +150,12 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ currentUser, onLog
 
   const myAnnouncements = announcements
     .filter(a => {
+      if (a.targetClass) return a.targetClass === student.classId;
       if (a.category === 'Umum') return true;
       if (a.category === 'Kelas X') return student.classId.startsWith('X-');
       if (a.category === 'Kelas XI') return student.classId.startsWith('XI-');
       if (a.category === 'Kelas XII') return student.classId.startsWith('XII-');
-      return a.targetClass === student.classId;
+      return false;
     })
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
@@ -271,27 +273,17 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ currentUser, onLog
       <div className="min-w-0 rounded-2xl bg-slate-900 p-4 text-white shadow-xl sm:p-8">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
           <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-blue-900 border-2 border-blue-700 overflow-hidden flex items-center justify-center font-bold text-amber-300 text-xl">
-              {currentUser.avatarUrl ? (
-                <img src={currentUser.avatarUrl} alt="" className="w-full h-full object-cover" />
-              ) : (
-                student.fullName.charAt(0)
-              )}
+            <div className="w-14 h-14 rounded-2xl bg-white border-2 border-white overflow-hidden flex items-center justify-center font-bold text-amber-300 text-xl">
+              <img src={getProfileAvatar(currentUser)} alt="" className="h-full w-full object-cover" />
             </div>
             <div className="min-w-0">
-              <p className="text-xs uppercase tracking-widest text-blue-200">Portal Siswa Terpadu</p>
-              <h1 className="mt-0.5 break-words text-xl font-bold sm:text-3xl">{student.fullName}</h1>
+              <p className="text-xs font-semibold text-amber-300">Selamat datang</p>
+              <h1 className="mt-0.5 break-words text-xl font-bold sm:text-3xl">{currentUser.fullName.trim() || currentUser.username}</h1>
               <p className="mt-1 break-words text-xs text-slate-300 sm:text-sm">
                 {student.className} · NISN: <span className="font-mono text-amber-300">{student.nisn}</span> · Wali Kelas: {student.homeroomTeacher}
               </p>
             </div>
           </div>
-          <button
-            onClick={onLogout}
-            className="inline-flex items-center gap-2 rounded-xl bg-white/10 hover:bg-white/20 px-4 py-2.5 text-xs font-semibold transition-colors cursor-pointer self-start md:self-auto"
-          >
-            <LogOut size={16} /> Keluar
-          </button>
         </div>
       </div>
 
@@ -612,11 +604,12 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ currentUser, onLog
                 <div className="flex items-start gap-3">
                   <div className="flex-1">
                     <div className="flex flex-wrap gap-2 text-xs">
-                      <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-900 font-semibold">{item.category}</span>
+                      <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-900 font-semibold">{item.targetClass || item.category}</span>
                       <span className="text-slate-500 py-0.5">{formatDate(item.createdAt)}</span>
                     </div>
                     <h3 className="font-bold text-base text-slate-900 mt-1.5">{item.title}</h3>
                     <p className="text-xs sm:text-sm text-slate-700 mt-1.5 whitespace-pre-line leading-relaxed">{item.content}</p>
+                    <PortalAnnouncementAttachments announcement={item} />
                     <p className="text-[11px] text-slate-500 mt-3 font-semibold">Pengirim: {item.teacherName}</p>
                   </div>
                 </div>

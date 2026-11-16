@@ -16,7 +16,8 @@ import {
   AssignmentSubmission,
   PortalAnnouncement,
   UserAccount,
-  UserRole
+  UserRole,
+  Gender
 } from '../types';
 import type { StudentImportRow, TeacherImportRow } from './rosterExcel';
 
@@ -129,6 +130,7 @@ export async function createManagedUser(input: {
   fullName: string;
   email: string;
   role: UserRole;
+  gender: Gender | '';
 }): Promise<{ user: UserAccount; temporaryPassword: string; message: string }> {
   return apiRequest('/users', { method: 'POST', body: JSON.stringify(input) });
 }
@@ -138,6 +140,7 @@ export async function updateManagedUser(id: string, input: {
   fullName: string;
   email: string;
   role: UserRole;
+  gender: Gender | '';
 }): Promise<{ user: UserAccount; message: string }> {
   return apiRequest(`/users/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(input) });
 }
@@ -590,13 +593,18 @@ export async function fetchPortalAnnouncements(): Promise<PortalAnnouncement[]> 
   return apiRequest<PortalAnnouncement[]>('/portal-announcements');
 }
 
-export async function savePortalAnnouncementApi(item: PortalAnnouncement): Promise<PortalAnnouncement> {
+export async function savePortalAnnouncementApi(item: PortalAnnouncement, image?: File, file?: File): Promise<PortalAnnouncement> {
   const isUpdate = Boolean(item.id);
+  const body = new FormData();
+  body.append('announcement', JSON.stringify(item));
+  if (image) body.append('image', image);
+  if (file) body.append('file', file);
+
   return apiRequest<PortalAnnouncement>(
     isUpdate ? `/portal-announcements/${encodeURIComponent(item.id)}` : '/portal-announcements',
     {
       method: isUpdate ? 'PUT' : 'POST',
-      body: JSON.stringify(item)
+      body
     }
   );
 }

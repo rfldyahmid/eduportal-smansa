@@ -14,7 +14,8 @@ import {
   Assignment,
   AssignmentSubmission,
   PortalAnnouncement,
-  UserRole
+  UserRole,
+  Gender
 } from '../../types';
 import { TEACHER_SUBJECTS } from '../../utils/teacherSubjects';
 import {
@@ -121,6 +122,7 @@ import {
 } from 'lucide-react';
 import { DEFAULT_CONTACT_INFO, CONTACT_INFO_UPDATED_EVENT } from '../../utils/contactInfo';
 import { SCHOOL_CLASSES } from '../../utils/schoolClasses';
+import { PortalAnnouncementAttachments } from './PortalAnnouncementAttachments';
 
 interface AdminPortalProps {
   currentUser: UserAccount;
@@ -271,9 +273,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
   const [internalAnnouncementForm, setInternalAnnouncementForm] = useState({
     title: '',
     category: 'Umum' as PortalAnnouncement['category'],
+    targetClass: '',
     content: '',
     isImportant: false
   });
+  const [internalAnnouncementImageFile, setInternalAnnouncementImageFile] = useState<File | null>(null);
+  const [internalAnnouncementDocumentFile, setInternalAnnouncementDocumentFile] = useState<File | null>(null);
   const [downloadingSubmissionId, setDownloadingSubmissionId] = useState<string | null>(null);
 
   // ---------------- ANNOUNCEMENTS STATE ----------------
@@ -371,7 +376,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
   const [editingUserAccount, setEditingUserAccount] = useState<UserAccount | null>(null);
   const [isSavingUserAccount, setIsSavingUserAccount] = useState(false);
   const [userAccountForm, setUserAccountForm] = useState({
-    username: '', fullName: '', email: '', role: 'siswa' as UserRole
+    username: '', fullName: '', email: '', role: 'siswa' as UserRole, gender: '' as Gender | ''
   });
   const rosterFileInputRef = useRef<HTMLInputElement>(null);
   const [isImportingRoster, setIsImportingRoster] = useState(false);
@@ -1389,7 +1394,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
 
   const openNewInternalAnnouncement = () => {
     setEditingInternalAnnouncement(null);
-    setInternalAnnouncementForm({ title: '', category: 'Umum', content: '', isImportant: false });
+    setInternalAnnouncementForm({ title: '', category: 'Umum', targetClass: '', content: '', isImportant: false });
+    setInternalAnnouncementImageFile(null);
+    setInternalAnnouncementDocumentFile(null);
     setInternalActionError('');
     setIsInternalAnnouncementFormOpen(true);
   };
@@ -1399,9 +1406,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
     setInternalAnnouncementForm({
       title: item.title,
       category: item.category,
+      targetClass: item.targetClass || '',
       content: item.content,
       isImportant: Boolean(item.isImportant)
     });
+    setInternalAnnouncementImageFile(null);
+    setInternalAnnouncementDocumentFile(null);
     setInternalActionError('');
     setIsInternalAnnouncementFormOpen(true);
   };
@@ -1414,16 +1424,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
       const saved = await savePortalAnnouncementApi({
         id: editingInternalAnnouncement?.id || '',
         ...internalAnnouncementForm,
+        targetClass: internalAnnouncementForm.targetClass || undefined,
         teacherId: editingInternalAnnouncement?.teacherId || '',
         teacherName: editingInternalAnnouncement?.teacherName || currentUser.fullName,
         createdAt: editingInternalAnnouncement?.createdAt || new Date().toISOString()
-      });
+      }, internalAnnouncementImageFile || undefined, internalAnnouncementDocumentFile || undefined);
       setInternalAnnouncements(previous => [
         saved,
         ...previous.filter(item => item.id !== saved.id)
       ]);
       setIsInternalAnnouncementFormOpen(false);
       setEditingInternalAnnouncement(null);
+      setInternalAnnouncementImageFile(null);
+      setInternalAnnouncementDocumentFile(null);
     } catch (error) {
       setInternalActionError(error instanceof Error ? error.message : 'Pengumuman internal gagal disimpan.');
     } finally {
@@ -1592,8 +1605,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
   const handleOpenUserForm = (user?: UserAccount) => {
     setEditingUserAccount(user || null);
     setUserAccountForm(user
-      ? { username: user.username, fullName: user.fullName, email: user.email || '', role: user.role }
-      : { username: '', fullName: '', email: '', role: 'siswa' });
+      ? { username: user.username, fullName: user.fullName, email: user.email || '', role: user.role, gender: user.gender || '' }
+      : { username: '', fullName: '', email: '', role: 'siswa', gender: '' });
     setIsUserFormOpen(true);
   };
 
@@ -3110,7 +3123,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                         value={internalAnnouncementForm.category}
                         onChange={event => setInternalAnnouncementForm(previous => ({
                           ...previous,
-                          category: event.target.value as PortalAnnouncement['category']
+                          category: event.target.value as PortalAnnouncement['category'],
+                          targetClass: ''
                         }))}
                         className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal"
                       >
@@ -3121,6 +3135,21 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                       </select>
                     </label>
                   </div>
+                  {internalAnnouncementForm.category !== 'Umum' && (
+                    <label className="block space-y-1 text-xs font-semibold text-slate-700">
+                      Kelas tertentu (opsional)
+                      <select
+                        value={internalAnnouncementForm.targetClass}
+                        onChange={event => setInternalAnnouncementForm(previous => ({ ...previous, targetClass: event.target.value }))}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal"
+                      >
+                        <option value="">Semua kelas {internalAnnouncementForm.category.replace('Kelas ', '')}</option>
+                        {SCHOOL_CLASSES.filter(classId => classId.startsWith(
+                          internalAnnouncementForm.category === 'Kelas X' ? 'X-' : internalAnnouncementForm.category === 'Kelas XI' ? 'XI-' : 'XII-'
+                        )).map(classId => <option key={classId} value={classId}>{classId}</option>)}
+                      </select>
+                    </label>
+                  )}
                   <label className="block space-y-1 text-xs font-semibold text-slate-700">
                     Isi informasi
                     <textarea
@@ -3132,6 +3161,30 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                       className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal"
                       placeholder="Tulis informasi untuk guru dan murid..."
                     />
+                  </label>
+                  <label className="block space-y-1 text-xs font-semibold text-slate-700">
+                    Foto (opsional, maksimal 10 MB)
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={event => setInternalAnnouncementImageFile(event.target.files?.[0] || null)}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal"
+                    />
+                    {editingInternalAnnouncement?.imageName && !internalAnnouncementImageFile && (
+                      <span className="block font-normal text-slate-500">Foto saat ini: {editingInternalAnnouncement.imageName}</span>
+                    )}
+                  </label>
+                  <label className="block space-y-1 text-xs font-semibold text-slate-700">
+                    File (opsional, maksimal 10 MB)
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
+                      onChange={event => setInternalAnnouncementDocumentFile(event.target.files?.[0] || null)}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal"
+                    />
+                    {editingInternalAnnouncement?.fileName && !internalAnnouncementDocumentFile && (
+                      <span className="block font-normal text-slate-500">File saat ini: {editingInternalAnnouncement.fileName}</span>
+                    )}
                   </label>
                   <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
                     <input
@@ -3148,6 +3201,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                       onClick={() => {
                         setIsInternalAnnouncementFormOpen(false);
                         setEditingInternalAnnouncement(null);
+                        setInternalAnnouncementImageFile(null);
+                        setInternalAnnouncementDocumentFile(null);
                       }}
                       className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                     >
@@ -3193,6 +3248,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                     </div>
                     <h3 className="mt-3 font-bold text-slate-900">{item.title}</h3>
                     <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{item.content}</p>
+                    <PortalAnnouncementAttachments announcement={item} />
                     <p className="mt-3 border-t border-slate-100 pt-3 text-xs text-slate-500">Oleh {item.teacherName} · {new Date(item.createdAt).toLocaleString('id-ID')}</p>
                   </article>
                 )) : <p className="col-span-full rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">Belum ada pengumuman internal yang sesuai.</p>}
@@ -4754,6 +4810,23 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                 <select value={userAccountForm.role} onChange={event => setUserAccountForm({ ...userAccountForm, role: event.target.value as UserRole })} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-900">
                   <option value="siswa">Siswa</option><option value="guru">Guru</option><option value="admin">Admin</option><option value="kepala_sekolah">Kepala Sekolah</option><option value="ketua_kombel">Ketua KOMBEL</option>
                 </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-700">Jenis kelamin</label>
+                <select
+                  required={userAccountForm.role !== 'siswa'}
+                  disabled={userAccountForm.role === 'siswa'}
+                  value={userAccountForm.gender}
+                  onChange={event => setUserAccountForm({ ...userAccountForm, gender: event.target.value as Gender | '' })}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-900 disabled:bg-slate-100 disabled:text-slate-500"
+                >
+                  <option value="">{userAccountForm.role === 'siswa' ? 'Diambil otomatis dari profil siswa' : 'Pilih jenis kelamin'}</option>
+                  <option value="Laki-laki">Laki-laki</option>
+                  <option value="Perempuan">Perempuan</option>
+                </select>
+                {userAccountForm.role === 'siswa' && (
+                  <p className="text-xs text-slate-500">Jenis kelamin akun siswa mengikuti data profil siswa.</p>
+                )}
               </div>
               <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900">
                 {editingUserAccount

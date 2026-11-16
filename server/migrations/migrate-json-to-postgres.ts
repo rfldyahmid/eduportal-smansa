@@ -34,6 +34,7 @@ import { getCanonicalTeacherSubject } from '../../src/utils/teacherSubjects';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..', '..');
+const LEGACY_STUDENT_AVATAR = 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=200';
 const argv = process.argv.slice(2);
 const flag = (name: string) => argv.includes(name);
 const opt = (name: string, fallback: string) => {
@@ -304,6 +305,7 @@ async function buildPlan() {
       } else if (teacherById.has(u.linkedId)) teacherId = u.linkedId;
       else err(`${w}: linkedId ${u.linkedId} tidak ada di teachers.`);
     } else if (role !== 'admin') warn(`${w}: akun ${role} tanpa linkedId.`);
+    const gender = u.gender || (studentId ? src.students.find(student => student.id === studentId)?.gender : undefined);
 
     let mustChange = Boolean(u.mustChangePassword);
     const usesDefault = (defaultPwCandidates[role] || []).some(p => {
@@ -316,7 +318,9 @@ async function buildPlan() {
     add('users', {
       id: u.id, username: required(w, 'username', u.username), password_hash: required(w, 'passwordHash', u.passwordHash),
       salt: required(w, 'salt', u.salt), role, full_name: required(w, 'fullName', u.fullName), email: str(u.email),
-      avatar_url: nz(u.avatarUrl), student_id: studentId, teacher_id: teacherId, must_change_password: mustChange
+      avatar_url: u.avatarUrl === LEGACY_STUDENT_AVATAR ? null : nz(u.avatarUrl),
+      gender: gender ? checkEnum('gender', gender, w) : null,
+      student_id: studentId, teacher_id: teacherId, must_change_password: mustChange
     });
     trackUpload(w, u.avatarUrl);
   }

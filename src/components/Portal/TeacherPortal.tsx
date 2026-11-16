@@ -3,7 +3,6 @@ import {
   CalendarDays,
   ClipboardList,
   Megaphone,
-  LogOut,
   Plus,
   Trash2,
   Pencil,
@@ -36,16 +35,18 @@ import {
   downloadSubmissionFile,
   gradeSubmission
 } from '../../utils/api';
+import { getProfileAvatar } from '../../utils/profileAvatar';
+import { SCHOOL_CLASSES } from '../../utils/schoolClasses';
+import { PortalAnnouncementAttachments } from './PortalAnnouncementAttachments';
 
 interface TeacherPortalProps {
   currentUser: UserAccount;
-  onLogout: () => void;
   onNavigate?: (tab: string) => void;
 }
 
 const DAYS: ScheduleItem['day'][] = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 
-export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onLogout, onNavigate }) => {
+export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNavigate }) => {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const teacher = teachers.find(t => t.id === currentUser.linkedId || t.nip === currentUser.username) || {
     id: currentUser.linkedId || '',
@@ -118,6 +119,8 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onLog
   const [editingSchedule, setEditingSchedule] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState(false);
   const [editingAnnouncement, setEditingAnnouncement] = useState(false);
+  const [announcementImageFile, setAnnouncementImageFile] = useState<File | null>(null);
+  const [announcementDocumentFile, setAnnouncementDocumentFile] = useState<File | null>(null);
 
   const loadData = async () => {
     try {
@@ -214,6 +217,8 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onLog
       teacherName: teacher.fullName,
       createdAt: new Date().toISOString()
     });
+    setAnnouncementImageFile(null);
+    setAnnouncementDocumentFile(null);
     setEditingAnnouncement(false);
   };
 
@@ -298,7 +303,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onLog
         teacherName: teacher.fullName,
         teacherId: teacher.id,
         createdAt: announcementForm.createdAt || new Date().toISOString()
-      });
+      }, announcementImageFile || undefined, announcementDocumentFile || undefined);
       setAnnouncements(prev => [saved, ...prev.filter(item => item.id !== saved.id)]);
       resetAnnouncement();
     } catch (error) {
@@ -363,6 +368,8 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onLog
 
   const startEditAnnouncement = (item: PortalAnnouncement) => {
     setAnnouncementForm(item);
+    setAnnouncementImageFile(null);
+    setAnnouncementDocumentFile(null);
     setEditingAnnouncement(true);
     setActiveTab('pengumuman');
   };
@@ -379,25 +386,19 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onLog
       {/* Header Profile */}
       <div className="flex min-w-0 flex-col justify-between gap-5 rounded-2xl bg-slate-900 p-4 text-white shadow-xl sm:p-8 md:flex-row md:items-center">
         <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-blue-900 border-2 border-blue-700 overflow-hidden flex items-center justify-center font-bold text-amber-300 text-xl">
-            {currentUser.avatarUrl ? (
-              <img src={currentUser.avatarUrl} alt="" className="w-full h-full object-cover" />
-            ) : (
-              teacher.fullName.charAt(0)
-            )}
+          <div className="w-14 h-14 rounded-2xl bg-white border-2 border-white overflow-hidden flex items-center justify-center font-bold text-amber-300 text-xl">
+            <img src={getProfileAvatar(currentUser)} alt="" className="h-full w-full object-cover" />
           </div>
           <div className="min-w-0">
+            <p className="text-xs font-semibold text-amber-300">Selamat datang</p>
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <p className="text-xs uppercase tracking-widest text-blue-200">
-                {currentUser.role === 'ketua_kombel' ? 'Portal Guru & Ketua KOMBEL' : 'Portal Guru SMAN 1 Halteng'}
-              </p>
               {currentUser.role === 'ketua_kombel' && (
                 <span className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 font-bold text-[10px]">
                   Ketua KOMBEL
                 </span>
               )}
             </div>
-            <h1 className="mt-0.5 break-words text-xl font-bold sm:text-3xl">{teacher.fullName}</h1>
+            <h1 className="mt-0.5 break-words text-xl font-bold sm:text-3xl">{currentUser.fullName.trim() || currentUser.username}</h1>
             <p className="mt-1 break-words text-xs text-slate-300 sm:text-sm">
               NIP: <span className="font-mono text-amber-300">{teacher.nip.replace(/\s+/g, '')}</span> · {teacher.subject === 'Kepala Sekolah' ? 'Jabatan' : 'Mapel'}: {teacher.subject}
             </p>
@@ -407,12 +408,6 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onLog
           </div>
         </div>
 
-        <button
-          onClick={onLogout}
-          className="inline-flex items-center gap-2 rounded-xl bg-white/10 hover:bg-white/20 px-4 py-2.5 text-xs font-semibold transition-colors cursor-pointer self-start md:self-auto"
-        >
-          <LogOut size={16} /> Keluar
-        </button>
       </div>
 
       {/* Special Banner for Ketua KOMBEL */}
@@ -907,6 +902,21 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onLog
                 <option>Kelas XII</option>
               </select>
             </div>
+            {announcementForm.category !== 'Umum' && (
+              <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700">Kelas tertentu (opsional)</label>
+              <select
+                className="w-full border rounded-lg p-2 text-xs"
+                value={announcementForm.targetClass || ''}
+                onChange={e => setAnnouncementForm({ ...announcementForm, targetClass: e.target.value || undefined })}
+              >
+                <option value="">Semua kelas {announcementForm.category.replace('Kelas ', '')}</option>
+                {SCHOOL_CLASSES.filter(classId => classId.startsWith(
+                  announcementForm.category === 'Kelas X' ? 'X-' : announcementForm.category === 'Kelas XI' ? 'XI-' : 'XII-'
+                )).map(classId => <option key={classId} value={classId}>{classId}</option>)}
+              </select>
+              </div>
+            )}
             <div className="space-y-1">
               <label className="text-xs font-semibold text-slate-700">Isi Pengumuman</label>
               <textarea
@@ -918,6 +928,26 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onLog
                 onChange={e => setAnnouncementForm({ ...announcementForm, content: e.target.value })}
               />
             </div>
+            <label className="block space-y-1 text-xs font-semibold text-slate-700">
+              Foto (opsional, maksimal 10 MB)
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="w-full text-xs font-normal"
+                onChange={e => setAnnouncementImageFile(e.target.files?.[0] || null)}
+              />
+              {announcementForm.imageName && !announcementImageFile && <span className="block font-normal text-slate-500">Foto saat ini: {announcementForm.imageName}</span>}
+            </label>
+            <label className="block space-y-1 text-xs font-semibold text-slate-700">
+              File (opsional, maksimal 10 MB)
+              <input
+                type="file"
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
+                className="w-full text-xs font-normal"
+                onChange={e => setAnnouncementDocumentFile(e.target.files?.[0] || null)}
+              />
+              {announcementForm.fileName && !announcementDocumentFile && <span className="block font-normal text-slate-500">File saat ini: {announcementForm.fileName}</span>}
+            </label>
             <button className="w-full rounded-lg bg-blue-900 text-white py-2 text-xs font-semibold inline-flex justify-center items-center gap-2 cursor-pointer">
               <Megaphone size={15} /> {editingAnnouncement ? 'Simpan Perubahan' : 'Publikasikan Pengumuman'}
             </button>
@@ -934,10 +964,11 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onLog
                   <div key={item.id} className="p-4 flex flex-col md:flex-row md:items-center gap-3">
                     <div className="flex-1">
                       <div className="flex gap-2 items-center">
-                        <span className="text-[11px] font-bold rounded-full bg-blue-50 text-blue-900 px-2 py-0.5">{item.category}</span>
+                        <span className="text-[11px] font-bold rounded-full bg-blue-50 text-blue-900 px-2 py-0.5">{item.targetClass || item.category}</span>
                         <span className="font-bold text-slate-900">{item.title}</span>
                       </div>
                       <p className="text-slate-600 mt-1 line-clamp-2">{item.content}</p>
+                      <PortalAnnouncementAttachments announcement={item} />
                       <p className="mt-1 text-[11px] text-slate-400">Oleh {item.teacherName}</p>
                     </div>
                     {item.teacherId && item.teacherId === teacher.id && (

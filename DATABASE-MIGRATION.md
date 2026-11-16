@@ -6,6 +6,8 @@ Migrasi versi 8 mengubah label kelas lama bernomor 1–5 menjadi A–E pada tabe
 
 Migrasi versi 13 menghapus rumpun departemen dari data guru/staf, baik kolom relasional maupun profil di `application_state`. Form, direktori, API, dan template/impor Excel hanya menggunakan mata pelajaran atau jabatan.
 
+Migrasi versi 14 menambahkan jenis kelamin opsional pada akun pengguna. Jenis kelamin akun siswa diselaraskan otomatis dari profil siswa; akun guru dan pengelola dapat mengaturnya melalui form akun pengguna. Foto unggahan tetap digunakan jika tersedia, sementara avatar cadangan dipilih berdasarkan jenis kelamin.
+
 ## Status aktual lingkungan lokal (21 Oktober 2026)
 
 - Service PostgreSQL lokal `postgresql-x64-18` berjalan dan koneksi melalui `DATABASE_URL` pada `.env` berhasil diuji. Nilai `.env` tidak dicatat di dokumen ini.

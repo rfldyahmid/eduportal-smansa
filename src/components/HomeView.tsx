@@ -3,17 +3,16 @@ import { formatNip } from '../utils/formatNip';
 import { getCurrentAcademicYear } from '../utils/academicYear';
 import { IMAGES } from '../assets/images';
 import { LatestAnnouncements } from './LatestAnnouncements';
-import { ArrowRight, ChevronLeft, ChevronRight, ShieldCheck } from 'lucide-react';
+import { ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { GalleryPhoto } from '../types';
 import { fetchGallery, fetchHomeHeroSlides } from '../utils/api';
 import { SCHOOL_MISSIONS } from '../utils/schoolMissions';
 
 interface HomeViewProps {
   onNavigate: (tab: string) => void;
-  onOpenPortal: () => void;
 }
 
-export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenPortal }) => {
+export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
   const academicYear = getCurrentAcademicYear();
   const [heroImages, setHeroImages] = useState<string[]>([IMAGES.heroSchool]);
   const [galleryItems, setGalleryItems] = useState<GalleryPhoto[]>([]);
@@ -95,40 +94,46 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenPortal }) 
           <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/70 to-slate-900/40" />
           <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent" />
           {heroImages.length > 1 && (
-            <>
-              <button type="button" onClick={() => moveHero(-1)} aria-label="Foto beranda sebelumnya" className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full border border-white/30 bg-slate-950/35 p-2.5 text-white backdrop-blur-sm transition hover:bg-slate-950/65 sm:left-6">
+            <div className="absolute bottom-5 right-4 flex items-center gap-2 sm:right-6">
+              <button type="button" onClick={() => moveHero(-1)} aria-label="Foto beranda sebelumnya" className="rounded-full border border-white/30 bg-slate-950/35 p-2.5 text-white backdrop-blur-sm transition hover:bg-slate-950/65">
                 <ChevronLeft className="h-5 w-5" />
               </button>
-              <button type="button" onClick={() => moveHero(1)} aria-label="Foto beranda berikutnya" className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full border border-white/30 bg-slate-950/35 p-2.5 text-white backdrop-blur-sm transition hover:bg-slate-950/65 sm:right-6">
+              <button type="button" onClick={() => moveHero(1)} aria-label="Foto beranda berikutnya" className="rounded-full border border-white/30 bg-slate-950/35 p-2.5 text-white backdrop-blur-sm transition hover:bg-slate-950/65">
                 <ChevronRight className="h-5 w-5" />
               </button>
-              <div className="absolute bottom-5 left-1/2 flex -translate-x-1/2 items-center gap-2">
+              <div className="ml-1 flex items-center gap-2">
                 {heroImages.map((image, index) => (
                   <button key={`${image}-dot-${index}`} type="button" onClick={() => setActiveHeroIndex(index)} aria-label={`Tampilkan foto ${index + 1}`} aria-current={activeHeroIndex === index} className={`h-2 rounded-full transition-all ${activeHeroIndex === index ? 'w-7 bg-amber-300' : 'w-2 bg-white/60 hover:bg-white'}`} />
                 ))}
               </div>
-            </>
+            </div>
           )}
         </div>
 
-        <div className="relative mx-auto w-full max-w-7xl px-4 py-12 sm:px-8 sm:py-20 lg:py-28">
-          <div className="max-w-2xl space-y-5 sm:space-y-6">
-            <div className="flex items-center gap-2 text-xs font-semibold text-amber-400 uppercase tracking-widest">
-              <span>SMA Negeri 1 Halmahera Tengah</span>
-              <span aria-hidden="true">·</span>
+        <div className="relative mx-auto w-full max-w-7xl px-4 py-16 sm:px-8 sm:py-20 lg:py-28">
+          <div className="max-w-3xl space-y-5 sm:space-y-6">
+            <div className="flex items-center gap-2 text-xs font-semibold text-white uppercase tracking-widest">
               <span>Weda, Maluku Utara</span>
             </div>
 
-            <h1 className="font-serif-title text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-white leading-[1.15]" style={{ textWrap: 'balance' }}>
-              Membentuk Generasi Cerdas Berakhlak Mulia di Bumi Fagogoru
+            <h1 className="font-serif-title font-bold leading-tight" style={{ textWrap: 'balance' }}>
+              <span className="home-hero-title-line block font-sans text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-wide text-amber-400">
+                Selamat Datang di
+              </span>
+              <span className="home-hero-title-line block font-sans text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-wide text-amber-400">
+                Website SMA Negeri 1
+              </span>
+              <span className="home-hero-title-line block font-sans text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-wide text-amber-400">
+                Halmahera Tengah
+              </span>
             </h1>
 
-            <p className="text-slate-300 text-sm sm:text-base leading-relaxed max-w-xl">
-              Selamat datang di SMA Negeri 1 Halmahera Tengah. Kami mengintegrasikan Kurikulum Merdeka, sains analitis, budi pekerti Fagogoru, dan wawasan kemaritiman untuk mencetak insan unggul Maluku Utara.
+            <p className="font-sans text-xs font-semibold uppercase tracking-widest text-white leading-snug" style={{ textWrap: 'balance' }}>
+              Membentuk Generasi Cerdas Berakhlak Mulia di Bumi Fagogoru
             </p>
 
             {/* CTAs */}
-            <div className="pt-2 flex flex-wrap items-center gap-3">
+            <div className="pt-3 flex flex-wrap items-center gap-3 sm:pt-4">
               <button
                 onClick={() => onNavigate('ppdb')}
                 className="px-6 py-3 text-sm font-semibold text-slate-950 bg-amber-400 hover:bg-amber-300 rounded-md transition-all shadow-md hover:shadow-lg flex items-center gap-2 whitespace-nowrap"
@@ -137,13 +142,6 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenPortal }) 
                 <ArrowRight className="w-4 h-4" />
               </button>
 
-              <button
-                onClick={onOpenPortal}
-                className="px-6 py-3 text-sm font-semibold text-white bg-blue-900/80 hover:bg-blue-800 border border-blue-600/40 rounded-md transition-all backdrop-blur-sm flex items-center gap-2 whitespace-nowrap"
-              >
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                <span>Login Siswa & Guru</span>
-              </button>
             </div>
           </div>
         </div>

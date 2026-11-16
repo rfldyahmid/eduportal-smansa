@@ -169,8 +169,18 @@ export function ensureDefaults(data: Partial<DatabaseSchema>): DatabaseSchema {
     return { ...profile, classId, className: classId };
   });
   const teachers = Array.isArray(data.teachers) ? data.teachers : [];
+  const legacyDefaultAvatar = 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=200';
+  const users = (Array.isArray(data.users) ? data.users : []).map(user => {
+    const linkedStudent = user.role === 'siswa'
+      ? students.find(student => student.id === user.linkedId)
+      : undefined;
+    const normalizedUser = user.avatarUrl === legacyDefaultAvatar
+      ? { ...user, avatarUrl: undefined }
+      : user;
+    return linkedStudent ? { ...normalizedUser, gender: linkedStudent.gender } : normalizedUser;
+  });
   return {
-    users: Array.isArray(data.users) ? data.users : [],
+    users,
     students,
     teachers: teachers.map(teacher => {
       const { department: _legacyDepartment, ...teacherData } = teacher as Teacher & { department?: unknown };
