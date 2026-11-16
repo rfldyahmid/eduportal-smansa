@@ -1,5 +1,6 @@
 import React from 'react';
-import { Compass, Award, Shield, Heart, Globe2 } from 'lucide-react';
+import { Compass, Award, Shield, Heart, Globe2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { SCHOOL_MISSIONS } from '../utils/schoolMissions';
 
 interface VisiMisiViewProps {
   onNavigate: (tab: string) => void;
@@ -59,22 +60,9 @@ export const VisiMisiView: React.FC<VisiMisiViewProps> = ({ onNavigate }) => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[
-            'Meningkatkan keimanan, ketakwaan, dan akhlak mulia peserta didik melalui pembiasaan nilai-nilai religius, integritas, kejujuran, tanggung jawab, dan sikap saling menghargai.',
-            'Mewujudkan pembelajaran yang berkualitas, aktif, inovatif, inklusif, dan berpusat pada peserta didik sesuai dengan kebutuhan, potensi, minat, dan karakteristik peserta didik.',
-            'Meningkatkan prestasi akademik dan nonakademik melalui pengembangan bakat, minat, kreativitas, kepemimpinan, olahraga, seni, sains, organisasi, dan kegiatan ekstrakurikuler.',
-            'Menguatkan kemampuan literasi dan numerasi sebagai dasar pengembangan kemampuan berpikir kritis, analitis, kreatif, komunikatif, dan pemecahan masalah.',
-            'Mengembangkan kecakapan digital dan pemanfaatan teknologi serta kecerdasan artifisial (AI) secara bijak, etis, aman, dan bertanggung jawab untuk mendukung proses pembelajaran.',
-            'Membentuk budaya sekolah yang disiplin, aman, nyaman, sehat, ramah anak, dan bebas dari perundungan, serta menjunjung tinggi penghargaan terhadap keberagaman.',
-            'Menumbuhkan sikap mandiri, gotong royong, kepemimpinan, kewirausahaan, dan tanggung jawab sosial dalam kehidupan sekolah maupun masyarakat.',
-            'Menanamkan kepedulian terhadap lingkungan melalui budaya hidup bersih, sehat, hemat sumber daya, pengelolaan sampah, dan pemanfaatan lingkungan sebagai sumber belajar.',
-            'Mengembangkan potensi dan kearifan lokal Halmahera Tengah sebagai bagian dari pembentukan identitas, kreativitas, dan karakter peserta didik.',
-            'Meningkatkan kompetensi dan profesionalisme pendidik serta tenaga kependidikan melalui pengembangan kompetensi berkelanjutan, kolaborasi, refleksi, dan inovasi.',
-            'Membangun kemitraan dan kolaborasi yang kuat antara sekolah, orang tua, komite, masyarakat, pemerintah, dan dunia kerja dalam mendukung peningkatan mutu pendidikan.',
-            'Mewujudkan tata kelola sekolah yang transparan, akuntabel, partisipatif, efektif, dan berbasis data untuk peningkatan mutu pendidikan secara berkelanjutan.',
-          ].map((misi, index) => (
-            <div key={misi} className="bg-white p-6 rounded-xl border border-slate-200 hover:border-blue-900/40 hover:shadow-md transition-all space-y-3">
-              <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-900 flex items-center justify-center font-bold font-mono">
+          {SCHOOL_MISSIONS.map((misi, index) => (
+            <div key={misi} className="bg-slate-50/80 p-6 rounded-xl border border-slate-100 hover:border-amber-200 hover:shadow-md transition-all space-y-3">
+              <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center font-bold font-mono">
                 {String(index + 1).padStart(2, '0')}
               </div>
               <p className="text-sm text-slate-700 leading-relaxed">{misi}</p>
@@ -155,6 +143,25 @@ export const VisiMisiView: React.FC<VisiMisiViewProps> = ({ onNavigate }) => {
           </button>
         </div>
       </div>
+
+      <nav aria-label="Navigasi halaman" className="flex items-center justify-between gap-4 border-t border-slate-200 pt-6">
+        <button
+          type="button"
+          onClick={() => onNavigate('beranda')}
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:border-blue-200 hover:text-blue-900"
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Kembali ke Beranda
+        </button>
+        <button
+          type="button"
+          onClick={() => onNavigate('sambutan')}
+          className="inline-flex items-center gap-2 rounded-lg bg-blue-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-800"
+        >
+          Lanjut ke Sambutan
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      </nav>
     </div>
   );
 };

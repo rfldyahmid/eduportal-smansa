@@ -6,6 +6,7 @@ import { LatestAnnouncements } from './LatestAnnouncements';
 import { ArrowRight, ChevronLeft, ChevronRight, ShieldCheck } from 'lucide-react';
 import { GalleryPhoto } from '../types';
 import { fetchGallery, fetchHomeHeroSlides } from '../utils/api';
+import { SCHOOL_MISSIONS } from '../utils/schoolMissions';
 
 interface HomeViewProps {
   onNavigate: (tab: string) => void;
@@ -253,7 +254,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenPortal }) 
                 onClick={() => onNavigate('visimisi')}
                 className="px-4 py-2 bg-blue-800/80 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg border border-blue-600/50 transition-all flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
               >
-                <span>Lihat Visi Misi Selengkapnya</span>
+                <span>Lihat 12 misi selengkapnya</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -268,36 +269,24 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenPortal }) 
               </blockquote>
             </div>
 
-            {/* Misi Highlights */}
-            <div className="space-y-3">
-              <span className="text-xs font-bold text-blue-200 uppercase tracking-wider block">
-                Pilar Misi Penyelenggaraan Pendidikan:
-              </span>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-slate-200">
-                <div className="bg-slate-950/40 p-4 rounded-lg border border-white/5 space-y-1.5">
-                  <span className="font-mono text-amber-400 font-bold block text-sm">01. Iman, Karakter & Budaya Lokal</span>
-                  <p className="leading-relaxed text-slate-300">
-                    Menanamkan keimanan, ketakwaan, akhlak mulia, integritas, kedisiplinan, tanggung jawab, gotong royong, serta penghargaan terhadap keberagaman dan kearifan lokal Halmahera Tengah.
-                  </p>
-                </div>
-                <div className="bg-slate-950/40 p-4 rounded-lg border border-white/5 space-y-1.5">
-                  <span className="font-mono text-amber-400 font-bold block text-sm">02. Pembelajaran Berkualitas & Prestasi</span>
-                  <p className="leading-relaxed text-slate-300">
-                    Mewujudkan pembelajaran yang aktif, inovatif, inklusif, dan berpusat pada peserta didik serta mengembangkan prestasi akademik, nonakademik, bakat, minat, kreativitas, dan kepemimpinan.
-                  </p>
-                </div>
-                <div className="bg-slate-950/40 p-4 rounded-lg border border-white/5 space-y-1.5">
-                  <span className="font-mono text-amber-400 font-bold block text-sm">03. Literasi, Numerasi & Teknologi Digital</span>
-                  <p className="leading-relaxed text-slate-300">
-                    Mengembangkan kemampuan literasi, numerasi, berpikir kritis, komunikasi, pemecahan masalah, serta kecakapan digital dan pemanfaatan kecerdasan artifisial (AI) secara bijak, etis, aman, dan bertanggung jawab.
-                  </p>
-                </div>
-                <div className="bg-slate-950/40 p-4 rounded-lg border border-white/5 space-y-1.5">
-                  <span className="font-mono text-amber-400 font-bold block text-sm">04. Lingkungan, Kemitraan & Tata Kelola Sekolah</span>
-                  <p className="leading-relaxed text-slate-300">
-                    Membangun budaya sekolah yang bersih, sehat, aman, dan peduli lingkungan, meningkatkan profesionalisme pendidik, memperkuat kemitraan dengan orang tua dan masyarakat, serta mewujudkan tata kelola sekolah yang transparan, akuntabel, dan berbasis data.
-                  </p>
-                </div>
+            <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 sm:p-6">
+              <div className="space-y-1">
+                <span className="block text-xs font-semibold uppercase tracking-wider text-amber-700">
+                  Arah Langkah Kami
+                </span>
+                <h3 className="font-serif-title text-xl font-bold text-slate-900">
+                  Misi Sekolah
+                </h3>
+              </div>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                {SCHOOL_MISSIONS.slice(0, 3).map((misi, index) => (
+                  <div key={misi} className="flex gap-3 rounded-lg border border-slate-100 bg-slate-50/80 p-4">
+                    <span className="font-mono text-sm font-bold text-amber-700">
+                      {String(index + 1).padStart(2, '0')}
+                    </span>
+                    <p className="text-sm leading-relaxed text-slate-700">{misi}</p>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
