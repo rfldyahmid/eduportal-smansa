@@ -3,7 +3,7 @@ import {
   CalendarDays,
   ClipboardList,
   Megaphone,
-  User,
+  UserRound,
   Clock3,
   MapPin,
   ChevronRight,
@@ -19,7 +19,6 @@ import {
 import { Student, UserAccount, ScheduleItem, Assignment, PortalAnnouncement, AssignmentSubmission } from '../../types';
 import { fetchMyStudentProfile, fetchStudentNotificationReads, markStudentNotificationsRead, fetchAssignments, fetchPortalAnnouncements, fetchSubmissions, submitAssignment, fetchSchedules } from '../../utils/api';
 import { PrintScheduleModal } from '../PrintScheduleModal';
-import { getProfileAvatar } from '../../utils/profileAvatar';
 import { PortalAnnouncementAttachments } from './PortalAnnouncementAttachments';
 
 interface StudentPortalProps {
@@ -271,18 +270,23 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ currentUser, onLog
       {dataLoadError && <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Sebagian data portal gagal dimuat dari server: {dataLoadError}. Data lokal tidak digunakan sebagai pengganti.</div>}
       {/* Student Profile Ribbon */}
       <div className="min-w-0 rounded-2xl bg-slate-900 p-4 text-white shadow-xl sm:p-8">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
+        <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
           <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-white border-2 border-white overflow-hidden flex items-center justify-center font-bold text-amber-300 text-xl">
-              <img src={getProfileAvatar(currentUser)} alt="" className="h-full w-full object-cover" />
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-2 border-amber-300/70 bg-gradient-to-br from-amber-100 to-blue-100 shadow-inner">
+              <UserRound aria-hidden="true" className="h-8 w-8 text-blue-950" strokeWidth={1.75} />
             </div>
             <div className="min-w-0">
               <p className="text-xs font-semibold text-amber-300">Selamat datang</p>
               <h1 className="mt-0.5 break-words text-xl font-bold sm:text-3xl">{currentUser.fullName.trim() || currentUser.username}</h1>
-              <p className="mt-1 break-words text-xs text-slate-300 sm:text-sm">
-                {student.className} · NISN: <span className="font-mono text-amber-300">{student.nisn}</span> · Wali Kelas: {student.homeroomTeacher}
-              </p>
             </div>
+          </div>
+          <div className="grid grid-cols-[5rem_minmax(0,1fr)] gap-x-3 gap-y-1.5 border-t border-slate-700 pt-4 text-xs md:min-w-64 md:border-l md:border-t-0 md:pl-6 md:pt-0">
+            <span className="text-slate-400">Kelas</span>
+            <span className="break-words font-medium text-white">{student.className || '—'}</span>
+            <span className="text-slate-400">NISN</span>
+            <span className="break-words font-mono font-medium text-amber-300">{student.nisn || '—'}</span>
+            <span className="text-slate-400">Wali Kelas</span>
+            <span className="break-words font-medium text-white">{student.homeroomTeacher || '—'}</span>
           </div>
         </div>
       </div>

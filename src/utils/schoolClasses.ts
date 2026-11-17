@@ -9,7 +9,7 @@ export type SchoolClass = typeof SCHOOL_CLASSES[number];
 const SCHOOL_CLASS_SET: ReadonlySet<string> = new Set(SCHOOL_CLASSES);
 
 export function normalizeSchoolClassId(value: string): string {
-  const classId = value.trim().toUpperCase().replace(/\s+/g, '-');
+  const classId = value.trim().toUpperCase().replace(/[\s_]+/g, '-');
   if (SCHOOL_CLASS_SET.has(classId)) return classId;
 
   const legacy = classId.match(/^(XII|XI|X)(?:-(?:MIPA|IPS|FASE-E(?:-\(UMUM\))?))?-(\d+)$/);

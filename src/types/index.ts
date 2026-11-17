@@ -268,6 +268,7 @@ export interface PasswordResetRequest {
   expiresAt: number;
   used: boolean;
   requestedAt: string;
+  requiresAdmin?: boolean;
 }
 
 export interface PPDBStatusResult {

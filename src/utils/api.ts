@@ -130,6 +130,41 @@ export async function apiAdminResetPassword(userId: string, tempPassword: string
   });
 }
 
+export interface StudentPasswordResetCredential {
+  fullName: string;
+  username: string;
+  className: string;
+  tempPassword: string;
+}
+
+export interface AdminPasswordResetNotification {
+  id: string;
+  userId: string;
+  fullName: string;
+  username: string;
+  role: UserRole;
+  className?: string;
+  requestedAt: string;
+  expiresAt: number;
+  requiresAdmin: boolean;
+}
+
+export async function fetchAdminPasswordResetNotifications(): Promise<{
+  requests: AdminPasswordResetNotification[];
+}> {
+  return apiRequest<{ requests: AdminPasswordResetNotification[] }>('/auth/admin-password-reset-requests');
+}
+
+export async function apiAdminResetStudentPasswords(): Promise<{
+  message: string;
+  credentials: StudentPasswordResetCredential[];
+}> {
+  return apiRequest<{ message: string; credentials: StudentPasswordResetCredential[] }>('/auth/admin-reset-student-passwords', {
+    method: 'POST',
+    body: JSON.stringify({ confirmation: 'RESET_ALL_STUDENT_PASSWORDS' })
+  });
+}
+
 export async function fetchUsers(): Promise<UserAccount[]> {
   return apiRequest<UserAccount[]>('/users');
 }

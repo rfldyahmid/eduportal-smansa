@@ -55,7 +55,7 @@ export const PrincipalSpeechView: React.FC<PrincipalSpeechViewProps> = ({ onNavi
             <div className="border-t border-slate-100 pt-4 text-xs space-y-2 text-slate-600">
               <div>
                 <span className="font-semibold text-slate-800 block">Pendidikan:</span>
-                <span>S1 Pendidikan Fisika dan S2 Magister Pendidikan, Universitas Khairun (Unkhair) Ternate</span>
+                <span>S1 Pendidikan agama islam universitas khairun ternate, S2 ppendidikan agama islam palu</span>
               </div>
               <div>
                 <span className="font-semibold text-slate-800 block">Pengabdian:</span>

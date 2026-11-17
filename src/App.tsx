@@ -84,6 +84,7 @@ export default function App() {
     setActiveSession(null);
     setCurrentUser(null);
     setCurrentTab('beranda');
+    setIsAuthOpen(true);
   };
 
   const handleOpenPortal = () => {

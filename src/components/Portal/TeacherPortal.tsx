@@ -384,7 +384,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
   return (
     <div className="mx-auto w-full min-w-0 max-w-7xl space-y-6 px-3 py-6 sm:px-8 sm:py-8">
       {/* Header Profile */}
-      <div className="flex min-w-0 flex-col justify-between gap-5 rounded-2xl bg-slate-900 p-4 text-white shadow-xl sm:p-8 md:flex-row md:items-center">
+      <div className="flex min-w-0 flex-col gap-5 rounded-2xl bg-slate-900 p-4 text-white shadow-xl sm:p-8 md:flex-row md:items-center md:justify-between">
         <div className="flex min-w-0 items-center gap-3 sm:gap-4">
           <div className="w-14 h-14 rounded-2xl bg-white border-2 border-white overflow-hidden flex items-center justify-center font-bold text-amber-300 text-xl">
             <img src={getProfileAvatar(currentUser)} alt="" className="h-full w-full object-cover" />
@@ -399,15 +399,16 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
               )}
             </div>
             <h1 className="mt-0.5 break-words text-xl font-bold sm:text-3xl">{currentUser.fullName.trim() || currentUser.username}</h1>
-            <p className="mt-1 break-words text-xs text-slate-300 sm:text-sm">
-              NIP: <span className="font-mono text-amber-300">{teacher.nip.replace(/\s+/g, '')}</span> · {teacher.subject === 'Kepala Sekolah' ? 'Jabatan' : 'Mapel'}: {teacher.subject}
-            </p>
-            <p className="text-xs sm:text-sm text-slate-300 mt-1">
-              Kelas Wali: <span className="font-semibold text-amber-300">{teacher.homeroomClass || 'Belum ditetapkan oleh admin'}</span>
-            </p>
           </div>
         </div>
-
+        <div className="grid grid-cols-[6rem_minmax(0,1fr)] gap-x-3 gap-y-1.5 border-t border-slate-700 pt-4 text-xs md:min-w-72 md:border-l md:border-t-0 md:pl-6 md:pt-0">
+          <span className="text-slate-400">NIP</span>
+          <span className="break-words font-mono font-medium text-amber-300">{teacher.nip.replace(/\s+/g, '') || '—'}</span>
+          <span className="text-slate-400">{teacher.subject === 'Kepala Sekolah' ? 'Jabatan' : 'Mata Pelajaran'}</span>
+          <span className="break-words font-medium text-white">{teacher.subject || '—'}</span>
+          <span className="text-slate-400">Kelas Wali</span>
+          <span className="break-words font-medium text-white">{teacher.homeroomClass || 'Belum ditetapkan oleh admin'}</span>
+        </div>
       </div>
 
       {/* Special Banner for Ketua KOMBEL */}

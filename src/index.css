@@ -91,6 +91,14 @@
   text-shadow: 1px 2px 0 #92400e, 3px 4px 0 #0f172a, 0 7px 12px rgb(2 6 23 / 75%);
 }
 
+.home-teacher-carousel {
+  scrollbar-width: none;
+}
+
+.home-teacher-carousel::-webkit-scrollbar {
+  display: none;
+}
+
 .school-header__upper {
   max-height: var(--header-upper-height, 16rem);
   overflow: hidden;
@@ -395,6 +403,11 @@
 }
 
 @media (max-width: 640px) {
+  .home-hero-title-line {
+    -webkit-text-stroke: 0;
+    text-shadow: none;
+  }
+
   input,
   select,
   textarea {

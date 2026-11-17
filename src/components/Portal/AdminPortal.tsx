@@ -79,6 +79,10 @@ import {
   permanentlyDeleteSelectedTrashItems,
   type DeletedItemSummary,
   apiAdminResetPassword,
+  apiAdminResetStudentPasswords,
+  type StudentPasswordResetCredential,
+  fetchAdminPasswordResetNotifications,
+  type AdminPasswordResetNotification,
   fileToDataUrl
 } from '../../utils/api';
 import {
@@ -122,7 +126,7 @@ import {
   Download
 } from 'lucide-react';
 import { DEFAULT_CONTACT_INFO, CONTACT_INFO_UPDATED_EVENT } from '../../utils/contactInfo';
-import { SCHOOL_CLASSES } from '../../utils/schoolClasses';
+import { normalizeSchoolClassId, SCHOOL_CLASSES } from '../../utils/schoolClasses';
 import { PortalAnnouncementAttachments } from './PortalAnnouncementAttachments';
 
 interface AdminPortalProps {
@@ -366,12 +370,24 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
   // ---------------- USERS & PASSWORD RESET STATE ----------------
   const [users, setUsers] = useState<UserAccount[]>([]);
   const [searchUser, setSearchUser] = useState('');
-  const [filterUserRole, setFilterUserRole] = useState('Semua');
+  const [userAccountGroup, setUserAccountGroup] = useState<'siswa' | 'guru' | 'admin' | 'semua'>('siswa');
+  const [filterStudentClass, setFilterStudentClass] = useState('Semua');
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [selectedUserForReset, setSelectedUserForReset] = useState<UserAccount | null>(null);
   const [tempPasswordInput, setTempPasswordInput] = useState('');
   const [resetSuccessMessage, setResetSuccessMessage] = useState('');
   const [copiedKey, setCopiedKey] = useState(false);
+  const [isBulkStudentPasswordResetOpen, setIsBulkStudentPasswordResetOpen] = useState(false);
+  const [isBulkStudentPasswordResetting, setIsBulkStudentPasswordResetting] = useState(false);
+  const [hasConfirmedBulkStudentPasswordReset, setHasConfirmedBulkStudentPasswordReset] = useState(false);
+  const [bulkStudentPasswordCredentials, setBulkStudentPasswordCredentials] = useState<StudentPasswordResetCredential[] | null>(null);
+  const [bulkStudentPasswordResetMessage, setBulkStudentPasswordResetMessage] = useState('');
+  const [bulkStudentPasswordResetError, setBulkStudentPasswordResetError] = useState('');
+  const [adminPasswordResetNotifications, setAdminPasswordResetNotifications] = useState<AdminPasswordResetNotification[]>([]);
+  const [isPasswordResetNotificationPanelOpen, setIsPasswordResetNotificationPanelOpen] = useState(false);
+  const [isLoadingPasswordResetNotifications, setIsLoadingPasswordResetNotifications] = useState(false);
+  const [passwordResetNotificationError, setPasswordResetNotificationError] = useState('');
+  const [passwordResetNotificationActionError, setPasswordResetNotificationActionError] = useState('');
   const [isProvisioningAccounts, setIsProvisioningAccounts] = useState(false);
   const [isResettingSchoolData, setIsResettingSchoolData] = useState(false);
   const [isUserFormOpen, setIsUserFormOpen] = useState(false);
@@ -380,7 +396,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
   const [userAccountForm, setUserAccountForm] = useState({
     username: '', fullName: '', email: '', role: 'siswa' as UserRole, gender: '' as Gender | ''
   });
-  const rosterFileInputRef = useRef<HTMLInputElement>(null);
+  const studentRosterFileInputRef = useRef<HTMLInputElement>(null);
+  const teacherRosterFileInputRef = useRef<HTMLInputElement>(null);
   const [isImportingRoster, setIsImportingRoster] = useState(false);
   const [isBulkAccountDeleteMode, setIsBulkAccountDeleteMode] = useState(false);
   const [selectedAccountIds, setSelectedAccountIds] = useState<Set<string>>(new Set());
@@ -477,6 +494,30 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
       setIsSyncing(false);
     }
   };
+
+  const refreshAdminPasswordResetNotifications = async (showLoading = false) => {
+    if (showLoading) setIsLoadingPasswordResetNotifications(true);
+    try {
+      const result = await fetchAdminPasswordResetNotifications();
+      setAdminPasswordResetNotifications(result.requests);
+      setPasswordResetNotificationError('');
+    } catch (error) {
+      setPasswordResetNotificationError(
+        error instanceof Error ? error.message : 'Gagal memuat permintaan reset sandi.'
+      );
+    } finally {
+      if (showLoading) setIsLoadingPasswordResetNotifications(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentUser.role !== 'admin') return;
+    void refreshAdminPasswordResetNotifications();
+    const intervalId = window.setInterval(() => {
+      void refreshAdminPasswordResetNotifications();
+    }, 30_000);
+    return () => window.clearInterval(intervalId);
+  }, [currentUser.role]);
 
   const loadTrash = async () => {
     setIsLoadingTrash(true);
@@ -772,28 +813,58 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
     }
   };
 
-  const handleRosterFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDownloadTeacherTemplate = async () => {
+    try {
+      const { downloadTeacherTemplate } = await import('../../utils/rosterExcel');
+      await downloadTeacherTemplate();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Gagal membuat template data guru.');
+    }
+  };
+
+  const handleRosterFileChange = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+    importType: 'students' | 'teachers'
+  ) => {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file || isImportingRoster) return;
 
     setIsImportingRoster(true);
     try {
-      const { parseRosterWorkbook } = await import('../../utils/rosterExcel');
-      const roster = await parseRosterWorkbook(file);
+      const importer = await import('../../utils/rosterExcel');
+      let roster: import('../../utils/rosterExcel').ParsedRosterWorkbook;
+      let skippedTeachers: { fullName: string; sourceRow: number }[] = [];
+      if (importType === 'teachers') {
+        const parsed = await importer.parseTeacherWorkbook(file);
+        roster = { students: [], teachers: parsed.teachers };
+        skippedTeachers = parsed.skippedTeachers;
+      } else {
+        roster = await importer.parseRosterWorkbook(file);
+      }
       const total = roster.students.length + roster.teachers.length;
+      const importSummary = importType === 'teachers'
+        ? `File khusus guru/staf berisi ${roster.teachers.length} baris. Data siswa tidak akan diubah. `
+        : `File berisi ${roster.students.length} siswa dan ${roster.teachers.length} guru/staf. `;
       if (!window.confirm(
-        `File berisi ${roster.students.length} siswa dan ${roster.teachers.length} guru/staf. ` +
+        importSummary +
+        (skippedTeachers.length
+          ? `${skippedTeachers.length} baris dilewati karena NIP kosong: ${skippedTeachers.map(item => `${item.fullName} (baris ${item.sourceRow})`).join(', ')}. `
+          : '') +
         'Data akan ditambahkan atau diperbarui berdasarkan NISN/NIP. Data yang tidak ada di file tetap dipertahankan. ' +
         'Akun portal tidak dibuat. Lanjutkan sinkronisasi?'
       )) return;
 
       const result = await syncAdminRoster(roster);
       await loadAllServerData();
-      window.alert(
-        `${result.message}\nSiswa: ${result.students.created} ditambahkan, ${result.students.updated} diperbarui.\n` +
-        `Guru/staf: ${result.teachers.created} ditambahkan, ${result.teachers.updated} diperbarui.\nTotal baris diproses: ${total}.`
-      );
+      const countsSummary = importType === 'teachers'
+        ? `Guru/staf: ${result.teachers.created} ditambahkan, ${result.teachers.updated} diperbarui.`
+        : `Siswa: ${result.students.created} ditambahkan, ${result.students.updated} diperbarui.\n` +
+          `Guru/staf: ${result.teachers.created} ditambahkan, ${result.teachers.updated} diperbarui.`;
+      const skippedSummary = skippedTeachers.length
+        ? `\nBaris dilewati karena NIP kosong: ${skippedTeachers.map(item => `${item.fullName} (baris ${item.sourceRow})`).join(', ')}.`
+        : '';
+      window.alert(`${result.message}\n${countsSummary}\nTotal baris diproses: ${total}.${skippedSummary}`);
     } catch (error) {
       window.alert(error instanceof Error ? error.message : 'Gagal membaca atau menyinkronkan file Excel.');
     } finally {
@@ -1521,14 +1592,49 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
   };
 
   // ---------------- USERS & PASSWORD RESET ----------------
+  const studentsById = new Map(students.map(student => [student.id, student]));
+  const studentsByNisn = new Map(students.map(student => [student.nisn, student]));
+  const getStudentClassForAccount = (user: UserAccount) => {
+    const student = (user.linkedId && studentsById.get(user.linkedId)) || studentsByNisn.get(user.username);
+    return student ? normalizeSchoolClassId(student.className || student.classId) || 'Belum tertaut' : 'Belum tertaut';
+  };
+  const studentAccounts = users.filter(user => user.role === 'siswa');
+  const studentAccountCountsByClass = new Map<string, number>();
+  studentAccounts.forEach(user => {
+    const classId = getStudentClassForAccount(user);
+    studentAccountCountsByClass.set(classId, (studentAccountCountsByClass.get(classId) || 0) + 1);
+  });
+  const getStudentGradeCount = (grade: 'X' | 'XI' | 'XII') =>
+    SCHOOL_CLASSES
+      .filter(classId => classId.startsWith(`${grade}-`))
+      .reduce((total, classId) => total + (studentAccountCountsByClass.get(classId) || 0), 0);
   const filteredUsers = users.filter(u => {
-    const matchesRole = filterUserRole === 'Semua' || u.role === filterUserRole;
+    const matchesGroup =
+      userAccountGroup === 'semua' ||
+      (userAccountGroup === 'siswa' && u.role === 'siswa') ||
+      (userAccountGroup === 'guru' && ['guru', 'kepala_sekolah', 'ketua_kombel'].includes(u.role)) ||
+      (userAccountGroup === 'admin' && u.role === 'admin');
+    const studentClass = userAccountGroup === 'siswa' ? getStudentClassForAccount(u) : '';
+    const matchesClass = userAccountGroup !== 'siswa' ||
+      filterStudentClass === 'Semua' ||
+      studentClass === filterStudentClass ||
+      (filterStudentClass === 'X' && studentClass.startsWith('X-')) ||
+      (filterStudentClass === 'XI' && studentClass.startsWith('XI-')) ||
+      (filterStudentClass === 'XII' && studentClass.startsWith('XII-'));
     const matchesSearch =
       u.fullName.toLowerCase().includes(searchUser.toLowerCase()) ||
       u.username.toLowerCase().includes(searchUser.toLowerCase()) ||
       (u.email && u.email.toLowerCase().includes(searchUser.toLowerCase()));
-    return matchesRole && matchesSearch;
+    return matchesGroup && matchesClass && matchesSearch;
   });
+  if (userAccountGroup === 'siswa') {
+    const classOrder = new Map<string, number>(SCHOOL_CLASSES.map((classId, index) => [classId, index]));
+    filteredUsers.sort((a, b) =>
+      (classOrder.get(getStudentClassForAccount(a)) ?? SCHOOL_CLASSES.length) -
+        (classOrder.get(getStudentClassForAccount(b)) ?? SCHOOL_CLASSES.length) ||
+      a.fullName.localeCompare(b.fullName, 'id-ID')
+    );
+  }
   const selectableUsers = filteredUsers.filter(user => user.id !== currentUser.id);
 
   const hasStudentAccount = (student: Student) => users.some(
@@ -1610,7 +1716,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
     setEditingUserAccount(user || null);
     setUserAccountForm(user
       ? { username: user.username, fullName: user.fullName, email: user.email || '', role: user.role, gender: user.gender || '' }
-      : { username: '', fullName: '', email: '', role: 'siswa', gender: '' });
+      : {
+          username: '',
+          fullName: '',
+          email: '',
+          role: userAccountGroup === 'guru' ? 'guru' : userAccountGroup === 'admin' ? 'admin' : 'siswa',
+          gender: ''
+        });
     setIsUserFormOpen(true);
   };
 
@@ -1751,6 +1863,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
       );
       // Refresh user list to show mustChangePassword flag
       loadAllServerData();
+      void refreshAdminPasswordResetNotifications();
     } catch (err: any) {
       alert(err?.message || 'Gagal mereset kata sandi.');
     }
@@ -1762,14 +1875,74 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
     setTimeout(() => setCopiedKey(false), 2500);
   };
 
+  const handleBulkResetStudentPasswords = async () => {
+    if (!hasConfirmedBulkStudentPasswordReset || isBulkStudentPasswordResetting) return;
+    setIsBulkStudentPasswordResetting(true);
+    setBulkStudentPasswordResetError('');
+    try {
+      const result = await apiAdminResetStudentPasswords();
+      setBulkStudentPasswordCredentials(result.credentials);
+      setBulkStudentPasswordResetMessage(result.message);
+      await loadAllServerData();
+    } catch (error) {
+      setBulkStudentPasswordResetError(
+        error instanceof Error ? error.message : 'Gagal mereset sandi akun siswa.'
+      );
+    } finally {
+      setIsBulkStudentPasswordResetting(false);
+    }
+  };
+
+  const handleDownloadStudentPasswordCredentials = () => {
+    if (!bulkStudentPasswordCredentials?.length) return;
+    const escapeCsvCell = (value: string) => {
+      const safeValue = /^[\u0000-\u0020]*[=+\-@]/.test(value) ? `'${value}` : value;
+      return `"${safeValue.replace(/"/g, '""')}"`;
+    };
+    const rows = [
+      ['Kelas', 'Nama Lengkap', 'Username / NISN', 'Sandi Sementara'],
+      ...bulkStudentPasswordCredentials.map(credential => [
+        credential.className,
+        credential.fullName,
+        credential.username,
+        credential.tempPassword
+      ])
+    ];
+    const csv = `\uFEFF${rows.map(row => row.map(escapeCsvCell).join(',')).join('\r\n')}`;
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `reset-sandi-akun-siswa-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const closeBulkStudentPasswordReset = () => {
+    if (isBulkStudentPasswordResetting) return;
+    setIsBulkStudentPasswordResetOpen(false);
+    setHasConfirmedBulkStudentPasswordReset(false);
+    setBulkStudentPasswordCredentials(null);
+    setBulkStudentPasswordResetMessage('');
+    setBulkStudentPasswordResetError('');
+  };
+
   return (
     <div className="mx-auto w-full min-w-0 max-w-7xl space-y-6 px-3 py-6 sm:space-y-8 sm:px-8 sm:py-8 lg:py-12">
       <input
-        ref={rosterFileInputRef}
+        ref={studentRosterFileInputRef}
         type="file"
         accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         className="hidden"
-        onChange={handleRosterFileChange}
+        onChange={event => handleRosterFileChange(event, 'students')}
+      />
+      <input
+        ref={teacherRosterFileInputRef}
+        type="file"
+        accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        className="hidden"
+        onChange={event => handleRosterFileChange(event, 'teachers')}
       />
       {/* Admin Header */}
       <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900 p-4 text-white shadow-xl sm:p-8">
@@ -2049,7 +2222,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
               </button>
               <button
                 type="button"
-                onClick={() => rosterFileInputRef.current?.click()}
+                onClick={() => studentRosterFileInputRef.current?.click()}
                 disabled={isImportingRoster}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -2155,14 +2328,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
               {bulkDeleteToolbar('teachers', filteredTeachers.map(item => item.id), 'guru/staf')}
               <button
                 type="button"
-                onClick={handleDownloadRosterTemplate}
+                onClick={handleDownloadTeacherTemplate}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
               >
                 <Download className="h-4 w-4" /> Template Excel
               </button>
               <button
                 type="button"
-                onClick={() => rosterFileInputRef.current?.click()}
+                onClick={() => teacherRosterFileInputRef.current?.click()}
                 disabled={isImportingRoster}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -3694,54 +3867,307 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
             )}
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
-            <div className="flex items-center gap-3 flex-wrap">
-              <div className="relative w-full max-w-full sm:w-72">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Cari nama atau username / NISN / NIP..."
-                  value={searchUser}
-                  onChange={e => setSearchUser(e.target.value)}
-                  className="w-full pl-9 pr-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-900 focus:outline-none"
-                />
+          <div className="space-y-4 border-b border-slate-200 pb-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Kelompok akun">
+                {([
+                  { id: 'siswa', label: `Akun Siswa (${users.filter(user => user.role === 'siswa').length})` },
+                  { id: 'guru', label: `Akun Guru/Staf (${users.filter(user => ['guru', 'kepala_sekolah', 'ketua_kombel'].includes(user.role)).length})` },
+                  { id: 'admin', label: `Akun Admin (${users.filter(user => user.role === 'admin').length})` },
+                  { id: 'semua', label: `Semua Akun (${users.length})` }
+                ] as const).map(group => (
+                  <button
+                    key={group.id}
+                    type="button"
+                    aria-pressed={userAccountGroup === group.id}
+                    onClick={() => {
+                      setUserAccountGroup(group.id);
+                      setFilterStudentClass('Semua');
+                      setSearchUser('');
+                      setSelectedAccountIds(new Set());
+                      setIsBulkAccountDeleteMode(false);
+                    }}
+                    className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
+                      userAccountGroup === group.id
+                        ? 'bg-blue-900 text-white shadow-sm'
+                        : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    {group.label}
+                  </button>
+                ))}
               </div>
 
-              <select
-                value={filterUserRole}
-                onChange={e => setFilterUserRole(e.target.value)}
-                className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-700 focus:ring-2 focus:ring-blue-900 focus:outline-none"
-              >
-                <option value="Semua">Semua Peran (Role)</option>
-                <option value="admin">Admin Tata Usaha</option>
-                <option value="kepala_sekolah">Kepala Sekolah</option>
-                <option value="ketua_kombel">Ketua KOMBEL</option>
-                <option value="guru">Dewan Guru</option>
-                <option value="siswa">Peserta Didik</option>
-              </select>
+              {currentUser.role === 'admin' && (
+                <button
+                  type="button"
+                  aria-expanded={isPasswordResetNotificationPanelOpen}
+                  onClick={() => {
+                    const shouldOpen = !isPasswordResetNotificationPanelOpen;
+                    setIsPasswordResetNotificationPanelOpen(shouldOpen);
+                    setPasswordResetNotificationActionError('');
+                    if (shouldOpen) void refreshAdminPasswordResetNotifications(true);
+                  }}
+                  className={`inline-flex shrink-0 items-center justify-center gap-2 self-start rounded-lg border px-3 py-2 text-xs font-semibold transition-colors sm:self-auto ${
+                    isPasswordResetNotificationPanelOpen
+                      ? 'border-blue-900 bg-blue-900 text-white'
+                      : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <Bell className="h-4 w-4" />
+                  Permintaan Reset Sandi
+                  <span className={`min-w-5 rounded-full px-1.5 py-0.5 text-center text-[10px] ${
+                    adminPasswordResetNotifications.length
+                      ? 'bg-rose-600 text-white'
+                      : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {adminPasswordResetNotifications.length}
+                  </span>
+                </button>
+              )}
             </div>
 
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-xs text-slate-500">Total {filteredUsers.length} akun terdaftar di sistem basis data</span>
-              <div className="flex flex-wrap justify-end gap-2">
-                <button onClick={() => handleOpenUserForm()} className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-blue-900 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-800">
-                  <UserPlus className="h-4 w-4" /> Tambah Akun
-                </button>
-                <button
-                  onClick={() => {
-                    setIsBulkAccountDeleteMode(mode => !mode);
-                    setSelectedAccountIds(new Set());
-                  }}
-                  className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${isBulkAccountDeleteMode ? 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50' : 'bg-rose-700 text-white hover:bg-rose-800'}`}
-                >
-                  <Trash2 className="h-4 w-4" /> {isBulkAccountDeleteMode ? 'Batal Pilih' : 'Hapus Akun'}
-                </button>
-                {isBulkAccountDeleteMode && (
-                  <button onClick={handleBulkDeleteUserAccounts} disabled={!selectedAccountIds.size || isDeletingAccounts} className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-rose-700 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-50">
-                    <Trash2 className="h-4 w-4" /> {isDeletingAccounts ? 'Menghapus...' : `Hapus Terpilih (${selectedAccountIds.size})`}
-                  </button>
+            {isPasswordResetNotificationPanelOpen && currentUser.role === 'admin' && (
+              <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">Permintaan Reset Sandi Pengguna</h3>
+                    <p className="mt-1 text-xs text-slate-600">
+                      Daftar permintaan aktif akan diperbarui otomatis setiap 30 detik.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void refreshAdminPasswordResetNotifications(true)}
+                      disabled={isLoadingPasswordResetNotifications}
+                      className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      <RotateCcw className={`h-3.5 w-3.5 ${isLoadingPasswordResetNotifications ? 'animate-spin' : ''}`} />
+                      Perbarui
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsPasswordResetNotificationPanelOpen(false)}
+                      aria-label="Tutup notifikasi reset sandi"
+                      className="rounded-lg p-1.5 text-slate-500 hover:bg-white hover:text-slate-800"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {passwordResetNotificationError && (
+                  <p role="alert" className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
+                    {passwordResetNotificationError}
+                  </p>
+                )}
+                {passwordResetNotificationActionError && (
+                  <p role="alert" className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
+                    {passwordResetNotificationActionError}
+                  </p>
+                )}
+
+                {isLoadingPasswordResetNotifications && !adminPasswordResetNotifications.length ? (
+                  <p className="mt-4 text-xs text-slate-600">Memuat permintaan reset sandi...</p>
+                ) : adminPasswordResetNotifications.length ? (
+                  <div className="mt-4 max-h-80 space-y-2 overflow-y-auto">
+                    {adminPasswordResetNotifications.map(request => (
+                      <div key={request.id} className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0 text-xs">
+                          <p className="font-bold text-slate-900">{request.fullName}</p>
+                          <p className="mt-0.5 font-mono text-slate-700">{request.username}</p>
+                          <p className="mt-1 text-slate-500">
+                            {request.role === 'siswa' && request.className
+                              ? `Siswa · Kelas ${request.className}`
+                              : request.role.replace(/_/g, ' ')}
+                            {' · '}
+                            {new Date(request.requestedAt).toLocaleString('id-ID')}
+                          </p>
+                          <span className={`mt-1 inline-flex rounded px-2 py-0.5 text-[10px] font-semibold ${
+                            request.requiresAdmin
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-emerald-100 text-emerald-800'
+                          }`}>
+                            {request.requiresAdmin ? 'Perlu ditangani admin' : 'Email pemulihan terkirim'}
+                          </span>
+                          <p className="text-[11px] text-slate-400">
+                            Kedaluwarsa {new Date(request.expiresAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const user = users.find(account => account.id === request.userId);
+                            if (!user) {
+                              setPasswordResetNotificationActionError(`Akun ${request.username} tidak ditemukan pada daftar akun.`);
+                              return;
+                            }
+                            setIsPasswordResetNotificationPanelOpen(false);
+                            handleOpenResetModal(user);
+                          }}
+                          className="inline-flex shrink-0 items-center justify-center gap-1 rounded-lg bg-blue-900 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-800"
+                        >
+                          <Key className="h-3.5 w-3.5" /> Reset Sandi
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-4 rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-600">
+                    Tidak ada permintaan reset sandi yang menunggu.
+                  </p>
                 )}
               </div>
+            )}
+
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="relative w-full max-w-full sm:w-72">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder={userAccountGroup === 'siswa' ? 'Cari nama atau NISN...' : 'Cari nama atau username / NIP...'}
+                    value={searchUser}
+                    onChange={e => setSearchUser(e.target.value)}
+                    className="w-full pl-9 pr-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-900 focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs text-slate-500">
+                    Total {filteredUsers.length} akun {userAccountGroup === 'siswa' ? 'siswa' : userAccountGroup === 'guru' ? 'guru/staf' : userAccountGroup === 'admin' ? 'admin' : 'pengguna'}
+                  </span>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <button onClick={() => handleOpenUserForm()} className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-blue-900 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-800">
+                      <UserPlus className="h-4 w-4" /> Tambah Akun
+                    </button>
+                    {userAccountGroup === 'siswa' && (
+                      <button
+                        type="button"
+                        disabled={!studentAccounts.length}
+                        onClick={() => {
+                          setHasConfirmedBulkStudentPasswordReset(false);
+                          setBulkStudentPasswordCredentials(null);
+                          setBulkStudentPasswordResetMessage('');
+                          setBulkStudentPasswordResetError('');
+                          setIsBulkStudentPasswordResetOpen(true);
+                        }}
+                        className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <Key className="h-4 w-4" /> Reset Semua Sandi Siswa
+                      </button>
+                    )}
+                    <button
+                      onClick={() => {
+                        setIsBulkAccountDeleteMode(mode => !mode);
+                        setSelectedAccountIds(new Set());
+                      }}
+                      className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${isBulkAccountDeleteMode ? 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50' : 'bg-rose-700 text-white hover:bg-rose-800'}`}
+                    >
+                      <Trash2 className="h-4 w-4" /> {isBulkAccountDeleteMode ? 'Batal Pilih' : 'Hapus Akun'}
+                    </button>
+                    {isBulkAccountDeleteMode && (
+                      <button onClick={handleBulkDeleteUserAccounts} disabled={!selectedAccountIds.size || isDeletingAccounts} className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-rose-700 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-50">
+                        <Trash2 className="h-4 w-4" /> {isDeletingAccounts ? 'Menghapus...' : `Hapus Terpilih (${selectedAccountIds.size})`}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {userAccountGroup === 'siswa' && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={filterStudentClass === 'X' || filterStudentClass.startsWith('X-') ? filterStudentClass : ''}
+                    onChange={event => {
+                      setFilterStudentClass(event.target.value);
+                      setSelectedAccountIds(new Set());
+                      setIsBulkAccountDeleteMode(false);
+                    }}
+                    aria-label="Pilih akun siswa kelas 10"
+                    className="w-full sm:w-56 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-900"
+                  >
+                    <option value="" disabled hidden>KELAS X</option>
+                    <option value="X">Semua Kelas 10 ({getStudentGradeCount('X')})</option>
+                    {SCHOOL_CLASSES.filter(classId => classId.startsWith('X-')).map(classId => (
+                      <option key={classId} value={classId}>
+                        Kelas {classId} ({studentAccountCountsByClass.get(classId) || 0})
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={filterStudentClass === 'XI' || filterStudentClass.startsWith('XI-') ? filterStudentClass : ''}
+                    onChange={event => {
+                      setFilterStudentClass(event.target.value);
+                      setSelectedAccountIds(new Set());
+                      setIsBulkAccountDeleteMode(false);
+                    }}
+                    aria-label="Pilih akun siswa kelas 11"
+                    className="w-full sm:w-56 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-900"
+                  >
+                    <option value="" disabled hidden>KELAS XI</option>
+                    <option value="XI">Semua Kelas 11 ({getStudentGradeCount('XI')})</option>
+                    {SCHOOL_CLASSES.filter(classId => classId.startsWith('XI-')).map(classId => (
+                      <option key={classId} value={classId}>
+                        Kelas {classId} ({studentAccountCountsByClass.get(classId) || 0})
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={filterStudentClass === 'XII' || filterStudentClass.startsWith('XII-') ? filterStudentClass : ''}
+                    onChange={event => {
+                      setFilterStudentClass(event.target.value);
+                      setSelectedAccountIds(new Set());
+                      setIsBulkAccountDeleteMode(false);
+                    }}
+                    aria-label="Pilih akun siswa kelas 12"
+                    className="w-full sm:w-56 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-900"
+                  >
+                    <option value="" disabled hidden>KELAS XII</option>
+                    <option value="XII">Semua Kelas 12 ({getStudentGradeCount('XII')})</option>
+                    {SCHOOL_CLASSES.filter(classId => classId.startsWith('XII-')).map(classId => (
+                      <option key={classId} value={classId}>
+                        Kelas {classId} ({studentAccountCountsByClass.get(classId) || 0})
+                      </option>
+                    ))}
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFilterStudentClass('Semua');
+                      setSelectedAccountIds(new Set());
+                      setIsBulkAccountDeleteMode(false);
+                    }}
+                    className={`rounded-lg px-3 py-2 text-xs font-semibold ${
+                      filterStudentClass === 'Semua'
+                        ? 'bg-blue-900 text-white'
+                        : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    Semua Kelas ({studentAccounts.length})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFilterStudentClass('Belum tertaut');
+                      setSelectedAccountIds(new Set());
+                      setIsBulkAccountDeleteMode(false);
+                    }}
+                    className={`rounded-lg px-3 py-2 text-xs font-semibold ${
+                      filterStudentClass === 'Belum tertaut'
+                        ? 'bg-blue-900 text-white'
+                        : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    Belum Tertaut ({studentAccountCountsByClass.get('Belum tertaut') || 0})
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -3754,7 +4180,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                     <th className="py-3 px-3 w-10 text-center">No</th>
                     <th className="py-3 px-4">Nama Lengkap Akun</th>
                     <th className="py-3 px-3">Username (NIP/NISN)</th>
-                    <th className="py-3 px-3">Peran Akses (RBAC)</th>
+                    {userAccountGroup === 'siswa'
+                      ? <th className="py-3 px-3">Kelas Siswa</th>
+                      : <th className="py-3 px-3">Peran Akses (RBAC)</th>}
                     <th className="py-3 px-3">Email Terdaftar</th>
                     <th className="py-3 px-3 text-center">Status Keamanan Sandi</th>
                     <th className="py-3 px-4 text-right">Kelola Akun</th>
@@ -3784,23 +4212,35 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                         <td className="py-3 px-3 font-mono text-slate-700 font-semibold">
                           {u.username}
                         </td>
-                        <td className="py-3 px-3">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              u.role === 'admin'
-                                ? 'bg-purple-100 text-purple-900'
-                                : u.role === 'kepala_sekolah'
+                        {userAccountGroup === 'siswa' ? (
+                          <td className="py-3 px-3">
+                            <span className={`rounded px-2 py-0.5 text-[10px] font-bold ${
+                              getStudentClassForAccount(u) === 'Belum tertaut'
                                 ? 'bg-amber-100 text-amber-900'
-                                : u.role === 'ketua_kombel'
-                                ? 'bg-emerald-100 text-emerald-900'
-                                : u.role === 'guru'
-                                ? 'bg-blue-100 text-blue-900'
-                                : 'bg-slate-100 text-slate-900'
-                            }`}
-                          >
-                            {u.role.replace('_', ' ').toUpperCase()}
-                          </span>
-                        </td>
+                                : 'bg-blue-100 text-blue-900'
+                            }`}>
+                              {getStudentClassForAccount(u)}
+                            </span>
+                          </td>
+                        ) : (
+                          <td className="py-3 px-3">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                u.role === 'admin'
+                                  ? 'bg-purple-100 text-purple-900'
+                                  : u.role === 'kepala_sekolah'
+                                  ? 'bg-amber-100 text-amber-900'
+                                  : u.role === 'ketua_kombel'
+                                  ? 'bg-emerald-100 text-emerald-900'
+                                  : u.role === 'guru'
+                                  ? 'bg-blue-100 text-blue-900'
+                                  : 'bg-slate-100 text-slate-900'
+                              }`}
+                            >
+                              {u.role.replace('_', ' ').toUpperCase()}
+                            </span>
+                          </td>
+                        )}
                         <td className="py-3 px-3 font-mono text-slate-500 text-[11px]">
                           {u.email || '-'}
                         </td>
@@ -4859,6 +5299,125 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
         </div>
       )}
 
+      {isBulkStudentPasswordResetOpen && (
+        <div role="dialog" aria-modal="true" aria-labelledby="bulk-student-password-reset-title" className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/80 p-3 backdrop-blur-sm sm:items-center sm:p-4">
+          <div className="w-full max-w-4xl space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div className="flex items-center gap-2">
+                <Key className="h-5 w-5 text-amber-700" />
+                <h3 id="bulk-student-password-reset-title" className="text-lg font-bold text-slate-900">
+                  Reset Sandi Semua Akun Siswa
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={closeBulkStudentPasswordReset}
+                disabled={isBulkStudentPasswordResetting}
+                aria-label="Tutup reset sandi massal"
+                className="rounded p-1 text-slate-400 hover:text-slate-700 disabled:opacity-50"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {bulkStudentPasswordCredentials ? (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-xs text-emerald-900">
+                  <p className="font-bold">{bulkStudentPasswordResetMessage}</p>
+                  <p className="mt-1">Semua siswa diwajibkan membuat sandi baru saat login berikutnya.</p>
+                </div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs text-amber-800">
+                    Sandi sementara hanya tersedia di sesi ini. Simpan file dengan aman dan bagikan secara pribadi.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleDownloadStudentPasswordCredentials}
+                    className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-900 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-800"
+                  >
+                    <Download className="h-4 w-4" /> Unduh CSV Sandi
+                  </button>
+                </div>
+                <div className="max-h-80 overflow-auto rounded-lg border border-slate-200">
+                  <table className="w-full text-left text-xs">
+                    <thead className="sticky top-0 bg-slate-100 text-slate-700">
+                      <tr>
+                        <th className="px-3 py-2">Kelas</th>
+                        <th className="px-3 py-2">Nama Siswa</th>
+                        <th className="px-3 py-2">Username / NISN</th>
+                        <th className="px-3 py-2">Sandi Sementara</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {bulkStudentPasswordCredentials.map(credential => (
+                        <tr key={credential.username}>
+                          <td className="px-3 py-2">{credential.className}</td>
+                          <td className="px-3 py-2 font-semibold">{credential.fullName}</td>
+                          <td className="px-3 py-2 font-mono">{credential.username}</td>
+                          <td className="px-3 py-2 font-mono font-semibold">{credential.tempPassword}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex justify-end border-t border-slate-200 pt-3">
+                  <button
+                    type="button"
+                    onClick={closeBulkStudentPasswordReset}
+                    className="rounded-lg bg-slate-900 px-5 py-2 text-xs font-semibold text-white hover:bg-slate-800"
+                  >
+                    Selesai
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <p className="text-sm text-slate-700">
+                  Tindakan ini akan mengganti sandi <strong>{studentAccounts.length} akun siswa</strong>, termasuk semua kelas. Setiap akun menerima sandi sementara yang berbeda.
+                </p>
+                <div className="space-y-1 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                  <strong>Perhatian:</strong>
+                  <p>Sandi lama langsung tidak berlaku. Semua siswa wajib mengganti sandi saat login berikutnya. Sandi sementara hanya ditampilkan sekali setelah reset.</p>
+                </div>
+                {bulkStudentPasswordResetError && (
+                  <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
+                    {bulkStudentPasswordResetError}
+                  </div>
+                )}
+                <label className="flex items-start gap-2 text-xs text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={hasConfirmedBulkStudentPasswordReset}
+                    onChange={event => setHasConfirmedBulkStudentPasswordReset(event.target.checked)}
+                    disabled={isBulkStudentPasswordResetting}
+                    className="mt-0.5"
+                  />
+                  <span>Saya memahami bahwa sandi seluruh akun siswa akan diganti dan saya akan membagikan sandi sementara secara pribadi.</span>
+                </label>
+                <div className="flex justify-end gap-2 border-t border-slate-200 pt-3">
+                  <button
+                    type="button"
+                    onClick={closeBulkStudentPasswordReset}
+                    disabled={isBulkStudentPasswordResetting}
+                    className="rounded-lg px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleBulkResetStudentPasswords}
+                    disabled={!hasConfirmedBulkStudentPasswordReset || isBulkStudentPasswordResetting}
+                    className="rounded-lg bg-amber-700 px-5 py-2 text-xs font-semibold text-white hover:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isBulkStudentPasswordResetting ? 'Mereset sandi...' : `Reset ${studentAccounts.length} Sandi Siswa`}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Modal: Admin Password Reset */}
       {isResetModalOpen && selectedUserForReset && (
         <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-start sm:items-center justify-center overflow-y-auto p-3 sm:p-4">
@@ -4884,6 +5443,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                 <span className="text-slate-500">Username / ID:</span>
                 <span className="font-mono font-bold text-blue-900">{selectedUserForReset.username}</span>
               </div>
+              {selectedUserForReset.role === 'siswa' && (
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Kelas Siswa:</span>
+                  <span className="font-semibold text-blue-900">{getStudentClassForAccount(selectedUserForReset)}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-slate-500">Peran Sistem:</span>
                 <span className="font-semibold text-slate-800">

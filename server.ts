@@ -694,61 +694,74 @@ app.post('/api/auth/forgot-password', async (req, res) => {
   const { usernameOrEmail } = req.body || {};
   if (!usernameOrEmail) return res.status(400).json({ message: 'NISN, NIP, atau Email wajib diisi.' });
 
+  const db = await getDb();
+  const query = String(usernameOrEmail).trim().toLowerCase();
+  const user = db.users.find(u => u.username.toLowerCase() === query || String(u.email || '').toLowerCase() === query);
+  const genericResponse = {
+    message: 'Jika akun terdaftar, instruksi pemulihan akan dikirim ke email yang valid atau permohonan akan diteruskan ke Admin Tata Usaha. Jika belum menerima email, hubungi Admin Tata Usaha.'
+  };
+
   const host = process.env.SMTP_HOST;
   const port = Number(process.env.SMTP_PORT || 587);
   const mailUser = process.env.SMTP_USER;
   const mailPass = process.env.SMTP_PASSWORD;
   const fromAddress = process.env.SMTP_FROM_EMAIL || mailUser;
-  if (!host || !Number.isInteger(port) || port < 1 || port > 65535 || !mailUser || !mailPass || !fromAddress) {
+  const hasSmtpConfiguration = Boolean(
+    host && Number.isInteger(port) && port > 0 && port <= 65535 && mailUser && mailPass && fromAddress
+  );
+  const email = String(user?.email || '').trim();
+  const normalizedEmail = email.toLowerCase();
+  const isSyntheticEmail = Boolean(
+    user && normalizedEmail === `${user.username.toLowerCase()}@siswa.sman1halteng.sch.id`
+  );
+  const hasDeliverableEmail = Boolean(
+    user && !isSyntheticEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+  );
+  const canSendEmail = Boolean(hasSmtpConfiguration && hasDeliverableEmail);
+  const token = crypto.randomBytes(32).toString('hex');
+  const now = Date.now();
+  let resetRequestId: string | null = null;
+
+  if (user) {
+    db.passwordResets = db.passwordResets.filter(request => !request.used && request.expiresAt > now);
+    const resetRequest: PasswordResetRequest = {
+      id: `rst-${now}-${crypto.randomBytes(6).toString('hex')}`,
+      userId: user.id,
+      username: user.username,
+      tokenHash: sha256(token),
+      expiresAt: now + (canSendEmail ? 30 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000),
+      used: false,
+      requestedAt: new Date(now).toISOString(),
+      requiresAdmin: !canSendEmail
+    };
+    resetRequestId = resetRequest.id;
+    db.passwordResets.unshift(resetRequest);
+    await saveDb();
+  }
+
+  if (!hasSmtpConfiguration) {
     return res.status(503).json({
-      message: 'Pemulihan email belum diaktifkan karena konfigurasi SMTP belum lengkap. Admin perlu mengatur SMTP_HOST, SMTP_USER, SMTP_PASSWORD, dan SMTP_FROM_EMAIL pada .env server lalu memulai ulang backend. Untuk sementara, hubungi Admin Tata Usaha agar sandi direset melalui menu Kelola Akun & Sandi.'
+      message: 'Permohonan sudah dicatat jika akun ditemukan. Pemulihan email belum aktif karena konfigurasi SMTP belum lengkap; hubungi Admin Tata Usaha atau minta admin memeriksa notifikasi reset sandi.'
     });
   }
 
-  const db = await getDb();
-  const query = String(usernameOrEmail).trim().toLowerCase();
-  const user = db.users.find(u => u.username.toLowerCase() === query || String(u.email || '').toLowerCase() === query);
-
-  const genericResponse = {
-    message: 'Jika akun memiliki email yang terdaftar, instruksi pemulihan akan dikirim. Jika tidak menerima email, hubungi Admin Tata Usaha.'
-  };
-  const isSyntheticEmail = user && (
-    String(user.email || '').toLowerCase() === `${user.username.toLowerCase()}@siswa.sman1halteng.sch.id` ||
-    String(user.email || '').toLowerCase() === `${user.username.toLowerCase()}@sman1halteng.sch.id`
-  );
-  if (!user || isSyntheticEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user.email)) return res.json(genericResponse);
-
-  // Prune expired or used reset requests to maintain high performance
-  const now = Date.now();
-  db.passwordResets = db.passwordResets.filter(r => !r.used && r.expiresAt > now);
-
-  const token = crypto.randomBytes(32).toString('hex');
-  const resetRequest: PasswordResetRequest = {
-    id: `rst-${Date.now()}`,
-    userId: user.id,
-    username: user.username,
-    tokenHash: sha256(token),
-    expiresAt: now + 30 * 60 * 1000, // 30 minutes
-    used: false,
-    requestedAt: new Date().toISOString()
-  };
-
-  db.passwordResets.unshift(resetRequest);
-  await saveDb();
-
-  const transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure: process.env.SMTP_SECURE
-      ? process.env.SMTP_SECURE.toLowerCase() === 'true'
-      : port === 465,
-    auth: { user: mailUser, pass: mailPass }
-  });
+  if (!user) return res.json(genericResponse);
+  if (!hasDeliverableEmail) {
+    return res.json(genericResponse);
+  }
 
   try {
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: process.env.SMTP_SECURE
+        ? process.env.SMTP_SECURE.toLowerCase() === 'true'
+        : port === 465,
+      auth: { user: mailUser, pass: mailPass }
+    });
     await transporter.sendMail({
       from: { name: process.env.SMTP_FROM_NAME || 'SMA Negeri 1 Halmahera Tengah', address: fromAddress },
-      to: user.email,
+      to: email,
       subject: 'Pemulihan Kata Sandi EDUPORTAL',
       text: [
         `Yth. ${user.fullName},`,
@@ -761,11 +774,20 @@ app.post('/api/auth/forgot-password', async (req, res) => {
       ].join('\n')
     });
   } catch (error) {
-    db.passwordResets = db.passwordResets.filter(item => item.id !== resetRequest.id);
-    await saveDb();
+    if (resetRequestId) {
+      const requestIndex = db.passwordResets.findIndex(request => request.id === resetRequestId);
+      if (requestIndex >= 0) {
+        db.passwordResets[requestIndex] = {
+          ...db.passwordResets[requestIndex],
+          requiresAdmin: true,
+          expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000
+        };
+        await saveDb();
+      }
+    }
     console.error('Gagal mengirim email pemulihan kata sandi:', error);
     return res.status(502).json({
-      message: 'Email pemulihan gagal dikirim. Periksa SMTP_USER, SMTP_PASSWORD (gunakan App Password Google, bukan kata sandi utama), dan SMTP_FROM_EMAIL, lalu coba kembali.'
+      message: 'Permohonan reset sandi sudah dicatat untuk ditindaklanjuti admin, tetapi email pemulihan gagal dikirim. Admin dapat memprosesnya melalui notifikasi reset sandi.'
     });
   }
 
@@ -780,7 +802,7 @@ app.post('/api/auth/reset-password', async (req, res) => {
 
   const db = await getDb();
   const resetIndex = db.passwordResets.findIndex(
-    r => matchesSha256(String(token), r.tokenHash) && !r.used && r.expiresAt > Date.now()
+    r => !r.requiresAdmin && matchesSha256(String(token), r.tokenHash) && !r.used && r.expiresAt > Date.now()
   );
 
   if (resetIndex < 0) {
@@ -805,6 +827,39 @@ app.post('/api/auth/reset-password', async (req, res) => {
   res.json({ message: 'Kata sandi berhasil direset. Silakan masuk menggunakan kata sandi baru Anda.' });
 });
 
+app.get('/api/auth/admin-password-reset-requests', requireAdmin, async (_req, res) => {
+  const db = await getDb();
+  const now = Date.now();
+  const requests = db.passwordResets
+    .filter(request => !request.used && request.expiresAt > now)
+    .flatMap(request => {
+      const user = db.users.find(account => account.id === request.userId);
+      if (!user) return [];
+
+      const student = user.role === 'siswa'
+        ? db.students.find(item => item.id === user.linkedId) ||
+          db.students.find(item => item.nisn === user.username)
+        : undefined;
+
+      return [{
+        id: request.id,
+        userId: user.id,
+        fullName: user.fullName,
+        username: user.username,
+        role: user.role,
+        className: student
+          ? normalizeSchoolClassId(student.className || student.classId) || 'Belum tertaut'
+          : undefined,
+        requestedAt: request.requestedAt,
+        expiresAt: request.expiresAt,
+        requiresAdmin: Boolean(request.requiresAdmin)
+      }];
+    })
+    .sort((first, second) => Date.parse(second.requestedAt) - Date.parse(first.requestedAt));
+
+  res.set('Cache-Control', 'no-store, private').json({ requests });
+});
+
 // Admin-assisted reset password
 app.post('/api/auth/admin-reset-password', requireAdmin, async (req, res) => {
   const { userId, tempPassword } = req.body || {};
@@ -825,6 +880,74 @@ app.post('/api/auth/admin-reset-password', requireAdmin, async (req, res) => {
   await saveDb();
 
   res.json({ message: `Kata sandi untuk ${db.users[userIndex].fullName} berhasil direset sementara.` });
+});
+
+app.post('/api/auth/admin-reset-student-passwords', requireAdmin, async (req, res) => {
+  if (req.body?.confirmation !== 'RESET_ALL_STUDENT_PASSWORDS') {
+    return res.status(400).json({ message: 'Konfirmasi reset sandi seluruh akun siswa tidak valid.' });
+  }
+
+  const db = await getDb();
+  const studentUsers = db.users.filter(user => user.role === 'siswa');
+  if (!studentUsers.length) {
+    return res.status(400).json({ message: 'Tidak ada akun siswa yang dapat direset.' });
+  }
+
+  const generatedPasswords = new Set<string>();
+  const credentials = studentUsers.map(user => {
+    let tempPassword = '';
+    do {
+      tempPassword = `T-${crypto.randomBytes(18).toString('base64url')}`;
+    } while (generatedPasswords.has(tempPassword));
+    generatedPasswords.add(tempPassword);
+
+    const student = db.students.find(item => item.id === user.linkedId) ||
+      db.students.find(item => item.nisn === user.username);
+    const salt = generateSalt();
+    return {
+      userId: user.id,
+      fullName: user.fullName,
+      username: user.username,
+      className: student
+        ? normalizeSchoolClassId(student.className || student.classId) || 'Belum tertaut'
+        : 'Belum tertaut',
+      tempPassword,
+      salt,
+      passwordHash: hashPassword(tempPassword, salt)
+    };
+  });
+
+  const credentialsByUserId = new Map(credentials.map(credential => [credential.userId, credential]));
+  const previousUsers = db.users;
+  const previousPasswordResets = db.passwordResets;
+  db.users = db.users.map(user => {
+    const credential = credentialsByUserId.get(user.id);
+    return credential
+      ? { ...user, salt: credential.salt, passwordHash: credential.passwordHash, mustChangePassword: true }
+      : user;
+  });
+  const resetUserIds = new Set(credentials.map(credential => credential.userId));
+  db.passwordResets = db.passwordResets.map(reset =>
+    resetUserIds.has(reset.userId) ? { ...reset, used: true } : reset
+  );
+
+  try {
+    await saveDb();
+  } catch (error) {
+    db.users = previousUsers;
+    db.passwordResets = previousPasswordResets;
+    throw error;
+  }
+
+  res.set('Cache-Control', 'no-store, private').json({
+    message: `Sandi sementara unik berhasil dibuat untuk ${credentials.length} akun siswa.`,
+    credentials: credentials.map(({ fullName, username, className, tempPassword }) => ({
+      fullName,
+      username,
+      className,
+      tempPassword
+    }))
+  });
 });
 
 // User accounts list for Admin
@@ -1612,7 +1735,7 @@ app.post('/api/admin/roster/import', requireAdmin, async (req, res) => {
   const studentRows = req.body?.students;
   const teacherRows = req.body?.teachers;
   if (!Array.isArray(studentRows) || !Array.isArray(teacherRows) || studentRows.length + teacherRows.length === 0) {
-    return res.status(400).json({ message: 'Data siswa dan guru/staf dari Excel tidak valid atau kosong.' });
+    return res.status(400).json({ message: 'Data impor dari Excel tidak valid atau kosong.' });
   }
   if (studentRows.length > 10000 || teacherRows.length > 10000 || studentRows.length + teacherRows.length > 10000) {
     return res.status(400).json({ message: 'Impor maksimal 10.000 baris dalam satu file.' });
@@ -1620,6 +1743,7 @@ app.post('/api/admin/roster/import', requireAdmin, async (req, res) => {
 
   const db = await getDb();
   const nextStudents = db.students.map(item => ({ ...item }));
+  const usedStudentNis = new Set(nextStudents.map(item => item.nis));
   const nextTeachers = db.teachers.map(item => ({ ...item, classesTaught: [...(item.classesTaught || [])] }));
   const errors: string[] = [];
   const studentSeen = new Set<string>();
@@ -1641,8 +1765,8 @@ app.post('/api/admin/roster/import', requireAdmin, async (req, res) => {
         ? 'Perempuan'
         : null;
     const classId = normalizeSchoolClassId(String(row.classId || '').trim());
-    if (!nisn || !fullName || !emailPattern.test(email) || !gender || !isSchoolClass(classId)) {
-      errors.push(`Sheet Siswa baris ${sourceRow}: NISN, nama, email valid, jenis kelamin, atau kelas tidak valid.`);
+    if (!nisn || !fullName || (email && !emailPattern.test(email)) || !gender || !isSchoolClass(classId)) {
+      errors.push(`Sheet Siswa baris ${sourceRow}: NISN, nama, email (jika diisi), jenis kelamin, atau kelas tidak valid.`);
       continue;
     }
     if (studentSeen.has(nisn)) {
@@ -1665,12 +1789,22 @@ app.post('/api/admin/roster/import', requireAdmin, async (req, res) => {
       continue;
     }
 
+    const providedNis = String(row.nis || '').trim();
+    let nis = providedNis || existing?.nis || nisn.slice(-5);
+    if (!providedNis && !existing) {
+      const defaultNis = nis;
+      while (usedStudentNis.has(nis)) {
+        nis = nis === defaultNis ? nisn : `AUTO-${nis}`;
+      }
+    }
+    usedStudentNis.add(nis);
+
     const item: Student = {
       id: existing?.id || `std-${crypto.randomUUID()}`,
       nisn,
-      nis: String(row.nis || '').trim() || existing?.nis || nisn.slice(-5),
+      nis,
       fullName,
-      email,
+      email: email || existing?.email || linkedUser?.email || '',
       gender,
       classId,
       className: classId,
@@ -1700,7 +1834,7 @@ app.post('/api/admin/roster/import', requireAdmin, async (req, res) => {
     const homeroomInput = String(row.homeroomClass || '').trim();
     const homeroomClass = homeroomInput ? normalizeSchoolClassId(homeroomInput) : '';
     if (
-      !nip || !fullName || !subject || !emailPattern.test(email) ||
+      !nip || !fullName || !subject || (email && !emailPattern.test(email)) ||
       classesTaught.some((classId: string) => !isSchoolClass(classId)) ||
       (homeroomClass && !isSchoolClass(homeroomClass))
     ) {
@@ -1736,7 +1870,7 @@ app.post('/api/admin/roster/import', requireAdmin, async (req, res) => {
       classesTaught: [...new Set(classesTaught.length ? classesTaught : existing?.classesTaught || [])],
       homeroomClass: homeroomClass || existing?.homeroomClass || '',
       education: String(row.education || '').trim() || existing?.education || '',
-      email,
+      email: email || existing?.email || linkedUser?.email || '',
       phone: String(row.phone || '').trim() || existing?.phone || '-',
       photoUrl: existing?.photoUrl || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=400',
       bio: String(row.bio || '').trim() || existing?.bio || ''
@@ -1771,8 +1905,8 @@ app.post('/api/admin/roster/import', requireAdmin, async (req, res) => {
     });
   }
 
-  db.students = nextStudents;
-  db.teachers = nextTeachers;
+  if (studentRows.length) db.students = nextStudents;
+  if (teacherRows.length) db.teachers = nextTeachers;
   for (const student of nextStudents.filter(item => studentSeen.has(item.nisn))) {
     const user = db.users.find(item =>
       item.role === 'siswa' && (item.linkedId === student.id || item.username === student.nisn)
@@ -1789,13 +1923,17 @@ app.post('/api/admin/roster/import', requireAdmin, async (req, res) => {
     );
     if (user) {
       user.fullName = teacher.fullName;
-      user.email = teacher.email;
+      if (teacher.email) user.email = teacher.email;
     }
   }
 
   await saveDb();
   res.json({
-    message: 'Sinkronisasi data siswa dan guru/staf berhasil.',
+    message: studentRows.length && teacherRows.length
+      ? 'Sinkronisasi data siswa dan guru/staf berhasil.'
+      : studentRows.length
+        ? 'Sinkronisasi data siswa berhasil.'
+        : 'Sinkronisasi data guru/staf berhasil.',
     students: studentCounts,
     teachers: teacherCounts
   });

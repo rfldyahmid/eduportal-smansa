@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { UserAccount, UserRole } from '../../types';
 import { setActiveSession } from '../../utils/storage';
 import { apiLogin, apiChangePassword, apiForgotPassword, apiResetPassword, clearAuthToken } from '../../utils/api';
@@ -40,6 +40,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
   const [resetToken, setResetToken] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setMode('login');
+    setPendingChangeUser(null);
+    setSelectedRole('siswa');
+    setUsername('');
+    setPassword('');
+    setShowPassword(false);
+    setErrorMsg('');
+    setSuccessMsg('');
+    setForgotInput('');
+    setResetToken('');
+    setNewPassword('');
+    setConfirmPassword('');
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -112,6 +128,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
       setActiveSession(result.user);
       setPendingChangeUser(null);
       setPassword('');
+      setMode('login');
+      setNewPassword('');
+      setConfirmPassword('');
       onSuccess(result.user);
       onClose();
     } catch (error: any) {

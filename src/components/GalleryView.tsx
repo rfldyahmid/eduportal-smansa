@@ -22,7 +22,6 @@ interface GalleryViewProps {
 }
 
 const PHOTO_CATEGORIES = ['Semua', 'Akademik', 'Prestasi', 'Ekstrakurikuler', 'Olahraga', 'Sosialisasi', 'Upacara'];
-const VIDEO_CATEGORIES = ['Semua', 'Profil', 'Prestasi', 'Kegiatan', 'Pembelajaran', 'Umum'];
 
 export const GalleryView: React.FC<GalleryViewProps> = ({ onNavigate, currentUser }) => {
   const [viewMode, setViewMode] = useState<'foto' | 'video'>('foto');
@@ -35,7 +34,6 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ onNavigate, currentUse
 
   // Video state
   const [videoItems, setVideoItems] = useState<YouTubeVideo[]>([]);
-  const [selectedVideoCategory, setSelectedVideoCategory] = useState('Semua');
   const [activeVideo, setActiveVideo] = useState<YouTubeVideo | null>(null);
 
   const [loading, setLoading] = useState(true);
@@ -69,11 +67,6 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ onNavigate, currentUse
   const filteredPhotos = selectedPhotoCategory === 'Semua'
     ? photoItems
     : photoItems.filter(item => item.category === selectedPhotoCategory);
-
-  // Filtered videos
-  const filteredVideos = selectedVideoCategory === 'Semua'
-    ? videoItems
-    : videoItems.filter(item => item.category === selectedVideoCategory);
 
   // Multi-photo array for active item
   const allImagesForActive = activePhoto
@@ -160,10 +153,10 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ onNavigate, currentUse
           </button>
         </div>
 
-        {/* Category Filters */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
-          {viewMode === 'foto' ? (
-            PHOTO_CATEGORIES.map(cat => (
+        {/* Photo Category Filters */}
+        {viewMode === 'foto' && (
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
+            {PHOTO_CATEGORIES.map(cat => (
               <button
                 key={cat}
                 onClick={() => setSelectedPhotoCategory(cat)}
@@ -175,23 +168,9 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ onNavigate, currentUse
               >
                 {cat}
               </button>
-            ))
-          ) : (
-            VIDEO_CATEGORIES.map(cat => (
-              <button
-                key={cat}
-                onClick={() => setSelectedVideoCategory(cat)}
-                className={`px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap cursor-pointer ${
-                  selectedVideoCategory === cat
-                    ? 'bg-rose-700 text-white shadow-sm'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                {cat}
-              </button>
-            ))
-          )}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Content Rendering */}
@@ -215,16 +194,17 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ onNavigate, currentUse
                     setActivePhoto(item);
                     setActivePhotoIndex(0);
                   }}
-                  className="group cursor-pointer bg-white rounded-2xl border border-slate-200 overflow-hidden hover:border-blue-900/40 hover:shadow-lg transition-all flex flex-col justify-between"
+                  className="group cursor-pointer bg-white rounded-2xl border border-blue-100 overflow-hidden hover:border-blue-900/50 hover:shadow-xl hover:shadow-blue-950/10 transition-all flex flex-col justify-between"
                 >
                   <div className="relative aspect-[16/10] overflow-hidden bg-slate-900">
+                    <div className="absolute inset-x-0 top-0 z-10 h-1 bg-gradient-to-r from-blue-950 via-blue-700 to-amber-400" />
                     <img
                       src={item.image}
                       alt={item.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
                     {count > 1 && (
-                      <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded bg-black/75 text-white text-[11px] font-mono backdrop-blur-sm">
+                      <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-md bg-blue-950/85 border border-amber-300/50 text-white text-[11px] font-mono backdrop-blur-sm">
                         +{count - 1} foto
                       </span>
                     )}
@@ -256,40 +236,40 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ onNavigate, currentUse
         )
       ) : (
         /* ================= YOUTUBE VIDEO GALLERY ================= */
-        filteredVideos.length === 0 ? (
+        videoItems.length === 0 ? (
           <div className="py-16 text-center bg-white rounded-2xl border border-slate-200">
             <Video className="w-8 h-8 mx-auto text-slate-300 mb-2" />
-            <p className="text-sm text-slate-500">Belum ada video pada kategori ini.</p>
+            <p className="text-sm text-slate-500">Belum ada video yang tersedia.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredVideos.map(video => (
+            {videoItems.map(video => (
               <div
                 key={video.id}
                 onClick={() => setActiveVideo(video)}
-                className="group cursor-pointer bg-white rounded-2xl border border-slate-200 overflow-hidden hover:border-rose-500/40 hover:shadow-lg transition-all flex flex-col justify-between"
+                className="group cursor-pointer bg-white rounded-2xl border border-blue-100 overflow-hidden hover:border-blue-900/50 hover:shadow-xl hover:shadow-blue-950/10 transition-all flex flex-col justify-between"
               >
                 <div className="relative aspect-[16/9] overflow-hidden bg-slate-950">
+                  <div className="absolute inset-x-0 top-0 z-10 h-1 bg-gradient-to-r from-blue-950 via-blue-700 to-amber-400" />
                   <img
                     src={video.thumbnailUrl}
                     alt={video.title}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                   />
                   <div className="absolute inset-0 bg-black/30 group-hover:bg-black/50 transition-colors flex items-center justify-center">
-                    <div className="w-12 h-12 rounded-full bg-rose-600 text-white flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-950 to-blue-700 ring-2 ring-amber-400 ring-offset-2 ring-offset-blue-950/40 text-white flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
                       <Play className="w-6 h-6 ml-1 fill-white" />
                     </div>
                   </div>
-                  <span className="absolute bottom-2.5 right-2.5 px-2 py-0.5 bg-black/80 text-white text-[10px] font-mono rounded">
+                  <span className="absolute bottom-2.5 right-2.5 px-2 py-0.5 bg-blue-950/90 border border-amber-300/50 text-white text-[10px] font-mono rounded-md">
                     YouTube
                   </span>
                 </div>
                 <div className="p-5 space-y-2">
                   <div className="flex items-center justify-between text-xs text-slate-500">
-                    <span className="font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded">{video.category}</span>
                     <span className="font-mono">{video.date}</span>
                   </div>
-                  <h3 className="font-bold text-slate-900 text-sm line-clamp-2 leading-snug group-hover:text-rose-700 transition-colors">
+                  <h3 className="font-bold text-slate-900 text-sm line-clamp-2 leading-snug group-hover:text-blue-900 transition-colors">
                     {video.title}
                   </h3>
                   {video.description && (
@@ -416,8 +396,6 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ onNavigate, currentUse
             <div className="p-6 space-y-3 overflow-y-auto">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-2 text-xs">
-                  <span className="font-bold text-rose-700 bg-rose-50 px-2.5 py-1 rounded">{activeVideo.category}</span>
-                  <span className="text-slate-400">·</span>
                   <span className="text-slate-500 font-mono">{activeVideo.date}</span>
                 </div>
                 <a

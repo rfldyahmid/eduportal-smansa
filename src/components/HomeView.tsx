@@ -1,11 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { formatNip } from '../utils/formatNip';
 import { getCurrentAcademicYear } from '../utils/academicYear';
 import { IMAGES } from '../assets/images';
 import { LatestAnnouncements } from './LatestAnnouncements';
 import { ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
-import { GalleryPhoto, HomeStats } from '../types';
-import { fetchGallery, fetchHomeHeroSlides, fetchHomeStats } from '../utils/api';
+import { GalleryPhoto, HomeStats, Teacher } from '../types';
+import { fetchGallery, fetchHomeHeroSlides, fetchHomeStats, fetchTeachers } from '../utils/api';
 import { SCHOOL_MISSIONS } from '../utils/schoolMissions';
 
 const formatStatCount = (value: number | undefined) =>
@@ -20,11 +20,32 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
   const [heroImages, setHeroImages] = useState<string[]>([IMAGES.heroSchool]);
   const [homeStats, setHomeStats] = useState<HomeStats | null>(null);
   const [homeStatsError, setHomeStatsError] = useState(false);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [teachersLoading, setTeachersLoading] = useState(true);
+  const [teachersError, setTeachersError] = useState(false);
   const [galleryItems, setGalleryItems] = useState<GalleryPhoto[]>([]);
   const [galleryLoading, setGalleryLoading] = useState(true);
   const [galleryError, setGalleryError] = useState(false);
   const [activeHeroIndex, setActiveHeroIndex] = useState(0);
   const touchStartX = useRef<number | null>(null);
+  const teacherCarouselRef = useRef<HTMLDivElement>(null);
+
+  const scrollTeachers = (direction: -1 | 1) => {
+    const carousel = teacherCarouselRef.current;
+    carousel?.scrollBy({ left: direction * carousel.clientWidth * 0.75, behavior: 'smooth' });
+  };
+
+  const loadTeachers = useCallback(() => {
+    setTeachersLoading(true);
+    setTeachersError(false);
+    fetchTeachers()
+      .then(data => setTeachers(data))
+      .catch(error => {
+        console.error('Gagal memuat daftar guru untuk beranda:', error);
+        setTeachersError(true);
+      })
+      .finally(() => setTeachersLoading(false));
+  }, []);
 
   useEffect(() => {
     let isLoading = false;
@@ -83,6 +104,10 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
     window.addEventListener('home-hero-updated', loadSlides);
     return () => window.removeEventListener('home-hero-updated', loadSlides);
   }, []);
+
+  useEffect(() => {
+    loadTeachers();
+  }, [loadTeachers]);
 
   useEffect(() => {
     setActiveHeroIndex(index => index % heroImages.length);
@@ -264,7 +289,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
                   onClick={() => onNavigate('sambutan')}
                   className="inline-flex items-center gap-2 text-sm font-semibold text-blue-900 hover:text-blue-700 group transition-colors"
                 >
-                  <span>Baca Sambutan Lengkap Kepala Sekolah</span>
+                  <span>Baca selengkapnya</span>
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </button>
               </div>
@@ -292,7 +317,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
                 onClick={() => onNavigate('visimisi')}
                 className="px-4 py-2 bg-blue-800/80 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg border border-blue-600/50 transition-all flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
               >
-                <span>Lihat 12 misi selengkapnya</span>
+                <span>Baca selengkapnya</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -328,6 +353,99 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* GURU & TENAGA PENDIDIK */}
+      <section className="max-w-7xl mx-auto w-full px-4 sm:px-8 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+          <div className="space-y-2">
+            <span className="text-xs font-semibold text-amber-700 uppercase tracking-widest">
+              Para Pendidik
+            </span>
+            <h2 className="font-serif-title text-2xl sm:text-3xl font-bold text-slate-900">
+              Guru & Tenaga Pendidik
+            </h2>
+          </div>
+        </div>
+
+        {teachersLoading ? (
+          <p className="py-8 text-center text-sm text-slate-500">Memuat daftar guru...</p>
+        ) : teachersError ? (
+          <div className="py-8 text-center text-sm text-slate-500">
+            <p>Daftar guru belum dapat dimuat. Silakan coba lagi.</p>
+            <button
+              type="button"
+              onClick={loadTeachers}
+              className="mt-2 font-semibold text-blue-900 hover:underline"
+            >
+              Coba lagi
+            </button>
+          </div>
+        ) : teachers.length === 0 ? (
+          <p className="py-8 text-center text-sm text-slate-500">Belum ada profil guru yang tersedia.</p>
+        ) : (
+          <div className="relative">
+            {teachers.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => scrollTeachers(-1)}
+                  aria-label="Geser daftar guru ke kiri"
+                  className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-blue-950/85 p-2.5 text-white shadow-lg transition hover:bg-blue-800"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => scrollTeachers(1)}
+                  aria-label="Geser daftar guru ke kanan"
+                  className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-blue-950/85 p-2.5 text-white shadow-lg transition hover:bg-blue-800"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+              </>
+            )}
+            <div
+              ref={teacherCarouselRef}
+              className="home-teacher-carousel flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth px-1 py-2"
+            >
+              {teachers.map(teacher => (
+                <article
+                  key={teacher.id}
+                  className="group relative aspect-[3/4] w-48 shrink-0 snap-start overflow-hidden rounded-xl bg-slate-900 shadow-md transition-shadow hover:shadow-xl sm:w-56"
+                >
+                  <img
+                    src={teacher.photoUrl || IMAGES.defaultAvatarNeutral}
+                    alt={`Foto ${teacher.fullName}`}
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-950/10 to-transparent" />
+                  <div className="absolute inset-x-0 bottom-0 space-y-1 p-4">
+                    <h3 className="line-clamp-2 text-base font-bold leading-snug text-amber-400">
+                      {teacher.fullName}
+                    </h3>
+                    <p className="line-clamp-1 text-sm font-medium text-white">
+                      {teacher.subject || 'Mata pelajaran belum dicantumkan'}
+                    </p>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => onNavigate('guru')}
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-blue-900 transition-colors hover:text-amber-700"
+          >
+            Daftar Guru Selengkapnya
+            <ArrowRight className="h-4 w-4" />
+          </button>
         </div>
       </section>
 

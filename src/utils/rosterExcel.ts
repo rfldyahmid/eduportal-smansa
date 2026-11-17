@@ -1,8 +1,14 @@
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import type { Student, Teacher } from '../types';
 import { getCanonicalTeacherSubject } from './teacherSubjects';
 
-export type StudentImportRow = Omit<Student, 'id' | 'className'> & { className?: string; sourceRow?: number };
+export type StudentImportRow = Omit<Student, 'id' | 'className' | 'nis' | 'academicYear'> & {
+  className?: string;
+  nis?: string;
+  academicYear?: string;
+  sourceRow?: number;
+};
 export type TeacherImportRow = Omit<Teacher, 'id' | 'photoUrl'> & { photoUrl?: string; sourceRow?: number };
 
 export interface ParsedRosterWorkbook {
@@ -10,13 +16,18 @@ export interface ParsedRosterWorkbook {
   teachers: TeacherImportRow[];
 }
 
+export interface ParsedTeacherWorkbook {
+  teachers: TeacherImportRow[];
+  skippedTeachers: { fullName: string; sourceRow: number }[];
+}
+
 const STUDENT_HEADERS = [
-  'NISN', 'NIS', 'Nama Lengkap', 'Email', 'Jenis Kelamin', 'Kelas',
-  'Wali Kelas', 'Tahun Ajaran'
+  'NISN', 'Nama Lengkap', 'Email (Opsional)', 'Jenis Kelamin', 'Kelas',
+  'Wali Kelas', 'Tahun Ajaran (Opsional)'
 ];
 const TEACHER_HEADERS = [
   'NIP', 'Nama Lengkap', 'Gelar', 'Mata Pelajaran / Jabatan',
-  'Email', 'Telepon', 'Kelas Diampu', 'Wali Kelas', 'Bio'
+  'Email', 'Telepon', 'Kelas Diampu'
 ];
 
 const normalizeHeader = (value: string) => value
@@ -24,6 +35,48 @@ const normalizeHeader = (value: string) => value
   .replace(/[\u0300-\u036f]/g, '')
   .toLowerCase()
   .replace(/[^a-z0-9]/g, '');
+
+async function removeUnsupportedCommentRelationships(buffer: ArrayBuffer): Promise<ArrayBuffer> {
+  const zip = await JSZip.loadAsync(buffer);
+  let removedRelationships = 0;
+  const relationshipPaths = Object.keys(zip.files).filter(path =>
+    /^xl\/worksheets\/_rels\/sheet\d+\.xml\.rels$/.test(path)
+  );
+
+  for (const path of relationshipPaths) {
+    const file = zip.file(path);
+    if (!file) continue;
+    const xml = await file.async('string');
+    const sanitizedXml = xml.replace(/<Relationship\b[^>]*\/>/g, relationship => {
+      if (!/\bType\s*=\s*(["'])[^"']*\/comments\1/i.test(relationship)) return relationship;
+      removedRelationships += 1;
+      return '';
+    });
+    if (sanitizedXml !== xml) zip.file(path, sanitizedXml);
+  }
+
+  if (!removedRelationships) {
+    throw new Error('File Excel memiliki referensi komentar/catatan yang tidak didukung. Hapus komentar atau catatan, lalu simpan ulang sebagai .xlsx.');
+  }
+  return zip.generateAsync({ type: 'arraybuffer' });
+}
+
+async function loadRosterWorkbook(file: File): Promise<ExcelJS.Workbook> {
+  const buffer = await file.arrayBuffer();
+  const workbook = new ExcelJS.Workbook();
+  try {
+    await workbook.xlsx.load(buffer);
+    return workbook;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    if (!/comments/i.test(message)) throw error;
+
+    const sanitizedBuffer = await removeUnsupportedCommentRelationships(buffer);
+    const sanitizedWorkbook = new ExcelJS.Workbook();
+    await sanitizedWorkbook.xlsx.load(sanitizedBuffer);
+    return sanitizedWorkbook;
+  }
+}
 
 function cellText(value: ExcelJS.CellValue): string {
   if (value === null || value === undefined) return '';
@@ -47,8 +100,8 @@ function readRows(workbook: ExcelJS.Workbook, sheetName: string, aliases: Record
     if (key) headers.set(column, key);
   });
   const requiredHeaders = sheetName === 'Siswa'
-    ? ['nisn', 'fullName', 'email', 'gender', 'classId']
-    : ['nip', 'fullName', 'subject', 'email'];
+    ? ['nisn', 'fullName', 'gender', 'classId']
+    : ['nip', 'fullName', 'subject'];
   const foundHeaders = new Set(headers.values());
   const missingHeaders = requiredHeaders.filter(header => !foundHeaders.has(header));
   if (missingHeaders.length) {
@@ -85,9 +138,11 @@ function readRows(workbook: ExcelJS.Workbook, sheetName: string, aliases: Record
 const STUDENT_ALIASES: Record<string, string> = {
   nisn: 'nisn', nomornisn: 'nisn', nis: 'nis', nomornis: 'nis',
   namalengkap: 'fullName', nama: 'fullName', fullname: 'fullName',
-  email: 'email', emailaktif: 'email', jeniskelamin: 'gender', gender: 'gender',
+  email: 'email', emailaktif: 'email', emailopsional: 'email',
+  jeniskelamin: 'gender', gender: 'gender',
   kelas: 'classId', class: 'classId', classid: 'classId',
-  walikelas: 'homeroomTeacher', tahunajaran: 'academicYear', academicyear: 'academicYear'
+  walikelas: 'homeroomTeacher',
+  tahunajaran: 'academicYear', tahunajaranopsional: 'academicYear', academicyear: 'academicYear'
 };
 
 const TEACHER_ALIASES: Record<string, string> = {
@@ -100,14 +155,30 @@ const TEACHER_ALIASES: Record<string, string> = {
   bio: 'bio', biografi: 'bio'
 };
 
+function mapTeacherRows(rows: Record<string, string>[]): TeacherImportRow[] {
+  return rows.map(row => ({
+    nip: row.nip,
+    fullName: row.fullName,
+    degree: row.degree || '',
+    subject: getCanonicalTeacherSubject(row.subject) || row.subject,
+    classesTaught: row.classesTaught ? row.classesTaught.split(/[,;]/).map(value => value.trim()).filter(Boolean) : [],
+    homeroomClass: '',
+    education: '',
+    email: row.email || '',
+    phone: row.phone || '',
+    photoUrl: '',
+    bio: '',
+    sourceRow: Number(row.__rowNumber)
+  }));
+}
+
 export async function parseRosterWorkbook(file: File): Promise<ParsedRosterWorkbook> {
   if (!file.name.toLowerCase().endsWith('.xlsx')) {
     throw new Error('Gunakan file Excel .xlsx. Unduh template untuk format yang sesuai.');
   }
   if (file.size > 10 * 1024 * 1024) throw new Error('Ukuran file maksimal 10 MB.');
 
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(await file.arrayBuffer());
+  const workbook = await loadRosterWorkbook(file);
   const studentRows = readRows(workbook, 'Siswa', STUDENT_ALIASES);
   const teacherRows = readRows(workbook, 'Guru & Staff', TEACHER_ALIASES);
   if (!studentRows.length && !teacherRows.length) {
@@ -117,31 +188,48 @@ export async function parseRosterWorkbook(file: File): Promise<ParsedRosterWorkb
   return {
     students: studentRows.map(row => ({
       nisn: row.nisn,
-      nis: row.nis || '',
+      nis: row.nis || undefined,
       fullName: row.fullName,
-      email: row.email,
+      email: row.email || undefined,
       gender: row.gender as Student['gender'],
       classId: row.classId,
       className: row.classId,
-      academicYear: row.academicYear || '2026/2027',
+      academicYear: row.academicYear || undefined,
       homeroomTeacher: row.homeroomTeacher || '-',
       sourceRow: Number(row.__rowNumber)
     })),
-    teachers: teacherRows.map(row => ({
-      nip: row.nip,
-      fullName: row.fullName,
-      degree: row.degree || '',
-      subject: getCanonicalTeacherSubject(row.subject) || row.subject,
-      classesTaught: row.classesTaught ? row.classesTaught.split(/[,;]/).map(value => value.trim()).filter(Boolean) : [],
-      homeroomClass: row.homeroomClass || '',
-      education: '',
-      email: row.email,
-      phone: row.phone || '-',
-      photoUrl: '',
-      bio: row.bio || '',
-      sourceRow: Number(row.__rowNumber)
-    }))
+    teachers: mapTeacherRows(teacherRows)
   };
+}
+
+export async function parseTeacherWorkbook(file: File): Promise<ParsedTeacherWorkbook> {
+  if (!file.name.toLowerCase().endsWith('.xlsx')) {
+    throw new Error('Gunakan file Excel .xlsx. Unduh template data guru untuk format yang sesuai.');
+  }
+  if (file.size > 10 * 1024 * 1024) throw new Error('Ukuran file maksimal 10 MB.');
+
+  const workbook = await loadRosterWorkbook(file);
+  const rows = readRows(workbook, 'Guru & Staff', TEACHER_ALIASES);
+  if (!rows.length) throw new Error('Sheet Guru & Staff tidak berisi data guru/staf.');
+
+  const skippedTeachers = rows
+    .filter(row => !row.nip?.trim())
+    .map(row => ({ fullName: row.fullName || 'Nama tidak tersedia', sourceRow: Number(row.__rowNumber) }));
+  const teacherRows = rows.filter(row => Boolean(row.nip?.trim()));
+  if (!teacherRows.length) throw new Error('Semua baris guru dilewati karena NIP kosong. Tidak ada data yang diimpor.');
+  return { teachers: mapTeacherRows(teacherRows), skippedTeachers };
+}
+
+async function downloadWorkbook(workbook: ExcelJS.Workbook, filename: string): Promise<void> {
+  const buffer = await workbook.xlsx.writeBuffer();
+  const url = URL.createObjectURL(new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 export async function downloadRosterTemplate(): Promise<void> {
@@ -151,16 +239,15 @@ export async function downloadRosterTemplate(): Promise<void> {
   const students = workbook.addWorksheet('Siswa');
   students.addRow(STUDENT_HEADERS);
   students.getColumn(1).numFmt = '@';
-  students.getColumn(2).numFmt = '@';
   students.views = [{ state: 'frozen', ySplit: 1 }];
-  students.autoFilter = { from: 'A1', to: 'H1' };
+  students.autoFilter = { from: 'A1', to: 'G1' };
 
   const teachers = workbook.addWorksheet('Guru & Staff');
   teachers.addRow(TEACHER_HEADERS);
   teachers.getColumn(1).numFmt = '@';
-  teachers.getColumn(6).numFmt = '@';
+  teachers.getColumn(7).numFmt = '@';
   teachers.views = [{ state: 'frozen', ySplit: 1 }];
-  teachers.autoFilter = { from: 'A1', to: 'I1' };
+  teachers.autoFilter = { from: 'A1', to: 'G1' };
 
   for (const sheet of workbook.worksheets) {
     sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
@@ -168,13 +255,22 @@ export async function downloadRosterTemplate(): Promise<void> {
     sheet.columns.forEach(column => { column.width = 22; });
   }
 
-  const buffer = await workbook.xlsx.writeBuffer();
-  const url = URL.createObjectURL(new Blob([buffer], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-  }));
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = 'template-data-siswa-guru.xlsx';
-  link.click();
-  URL.revokeObjectURL(url);
+  await downloadWorkbook(workbook, 'template-data-siswa-guru.xlsx');
+}
+
+export async function downloadTeacherTemplate(): Promise<void> {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'EDUPORTAL';
+
+  const teachers = workbook.addWorksheet('Guru & Staff');
+  teachers.addRow(TEACHER_HEADERS);
+  teachers.getColumn(1).numFmt = '@';
+  teachers.getColumn(7).numFmt = '@';
+  teachers.views = [{ state: 'frozen', ySplit: 1 }];
+  teachers.autoFilter = { from: 'A1', to: 'G1' };
+  teachers.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  teachers.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } };
+  teachers.columns.forEach(column => { column.width = 22; });
+
+  await downloadWorkbook(workbook, 'template-data-guru.xlsx');
 }
