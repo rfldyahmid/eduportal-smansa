@@ -71,6 +71,7 @@ import {
   resetSchoolData as apiResetSchoolData,
   createManagedUser,
   updateManagedUser,
+  updateOwnAdminProfile,
   bulkDeleteManagedUsers,
   fetchTrash,
   restoreTrashItem,
@@ -127,6 +128,8 @@ import {
 } from 'lucide-react';
 import { DEFAULT_CONTACT_INFO, CONTACT_INFO_UPDATED_EVENT } from '../../utils/contactInfo';
 import { normalizeSchoolClassId, SCHOOL_CLASSES } from '../../utils/schoolClasses';
+import { getProfileAvatar } from '../../utils/profileAvatar';
+import { setActiveSession } from '../../utils/storage';
 import { PortalAnnouncementAttachments } from './PortalAnnouncementAttachments';
 
 interface AdminPortalProps {
@@ -209,6 +212,14 @@ const formatAnnouncementDate = (value: string) => {
 
 export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout, onNavigate }) => {
   const [activeTab, setActiveTab] = useState<AdminTab>('siswa');
+  const [isAdminProfileModalOpen, setIsAdminProfileModalOpen] = useState(false);
+  const [isSavingAdminProfile, setIsSavingAdminProfile] = useState(false);
+  const [adminProfileError, setAdminProfileError] = useState('');
+  const [adminProfileForm, setAdminProfileForm] = useState({
+    fullName: currentUser.fullName,
+    email: currentUser.email || '',
+    avatarUrl: currentUser.avatarUrl || ''
+  });
 
   // ---------------- STUDENTS STATE ----------------
   const [students, setStudents] = useState<Student[]>([]);
@@ -492,6 +503,58 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
       console.warn('Sinkronisasi data server:', err);
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const openAdminProfileEditor = () => {
+    setAdminProfileForm({
+      fullName: currentUser.fullName,
+      email: currentUser.email || '',
+      avatarUrl: currentUser.avatarUrl || ''
+    });
+    setAdminProfileError('');
+    setIsAdminProfileModalOpen(true);
+  };
+
+  const handleAdminProfilePhotoChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!['image/jpeg', 'image/png'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+      setAdminProfileError('Pilih foto JPG atau PNG dengan ukuran maksimal 5 MB.');
+      return;
+    }
+    try {
+      const avatarUrl = await fileToDataUrl(file);
+      setAdminProfileForm(form => ({ ...form, avatarUrl }));
+      setAdminProfileError('');
+    } catch {
+      setAdminProfileError('Foto profil gagal dibaca. Silakan pilih ulang.');
+    }
+  };
+
+  const handleSaveAdminProfile = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setIsSavingAdminProfile(true);
+    setAdminProfileError('');
+    try {
+      const result = await updateOwnAdminProfile({
+        fullName: adminProfileForm.fullName.trim(),
+        email: adminProfileForm.email.trim(),
+        avatarUrl: adminProfileForm.avatarUrl
+      });
+      setActiveSession(result.user);
+      setAdminProfileForm({
+        fullName: result.user.fullName,
+        email: result.user.email || '',
+        avatarUrl: result.user.avatarUrl || ''
+      });
+      setIsAdminProfileModalOpen(false);
+      window.alert('Profil admin berhasil diperbarui.');
+    } catch (error) {
+      setAdminProfileError(error instanceof Error ? error.message : 'Profil admin gagal diperbarui.');
+    } finally {
+      setIsSavingAdminProfile(false);
     }
   };
 
@@ -1965,71 +2028,97 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                 )
               )}
             </div>
-            <h1 className="break-words font-serif-title text-xl font-bold text-white sm:text-3xl">
-              Pusat Manajemen Data SMAN 1 Halmahera Tengah
-            </h1>
-            <p className="text-xs text-slate-300 max-w-2xl">
-              Panel administrasi terpadu: pengelolaan peserta didik, direktori pendidik, verifikasi berkas PPDB,
-              publikasi warta, galeri foto & video, agenda KOMBEL, dan tata kelola akun pengguna.
+            <p className="text-sm font-semibold text-blue-200">
+              Selamat datang, {currentUser.fullName.trim() || (currentUser.role === 'admin' ? 'Admin' : 'Kepala Sekolah')}
             </p>
+            <h1 className="break-words font-serif-title text-xl font-bold text-white sm:text-3xl">
+              Dashboard Admin Sekolah
+            </h1>
           </div>
 
-          <div className="flex w-full flex-wrap items-center gap-2 md:w-auto md:gap-3">
-            <button
-              onClick={loadAllServerData}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-medium text-slate-200 shadow-sm transition-colors hover:bg-slate-700 md:flex-none"
-              title="Sinkronkan ulang data dari server"
-            >
-              <RotateCcw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>Muat Ulang</span>
-            </button>
-            <button
-              onClick={handleResetSchoolData}
-              disabled={isResettingSchoolData}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-rose-800/60 bg-rose-950/60 px-3.5 py-2 text-xs font-medium text-rose-200 shadow-sm transition-colors hover:bg-rose-900/80 md:flex-none"
-              title="Hapus data sekolah di PostgreSQL; akun admin tetap tersedia"
-            >
-              <AlertTriangle className={`w-3.5 h-3.5 ${isResettingSchoolData ? 'animate-pulse' : ''}`} />
-              <span>{isResettingSchoolData ? 'Mereset...' : 'Reset Data Sekolah'}</span>
-            </button>
+          <div className="flex w-full flex-col gap-3 md:w-auto md:items-end">
+            <div className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.06] p-3 md:w-auto">
+              <img
+                src={getProfileAvatar(currentUser)}
+                alt={currentUser.avatarUrl ? `Foto profil ${currentUser.fullName}` : 'Avatar admin'}
+                className="h-12 w-12 rounded-full border-2 border-white bg-white object-cover shadow-md"
+              />
+              <div className="min-w-0 flex-1 md:min-w-40">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-blue-200">
+                  {currentUser.role === 'admin' ? 'Akun Admin' : 'Akun Kepala Sekolah'}
+                </p>
+                <p className="mt-0.5 max-w-52 truncate text-sm font-semibold text-white">
+                  {currentUser.fullName.trim() || currentUser.username}
+                </p>
+                <p className="truncate text-[11px] text-slate-300">{currentUser.email || currentUser.username}</p>
+              </div>
+              {currentUser.role === 'admin' && (
+                <button
+                  type="button"
+                  onClick={openAdminProfileEditor}
+                  className="shrink-0 rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
+                >
+                  Ubah Profil
+                </button>
+              )}
+            </div>
+            <div className="flex w-full flex-wrap items-center gap-2 md:w-auto md:justify-end">
+              <button
+                onClick={loadAllServerData}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-medium text-slate-200 shadow-sm transition-colors hover:bg-slate-700 md:flex-none"
+                title="Sinkronkan ulang data dari server"
+              >
+                <RotateCcw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                <span>Muat Ulang</span>
+              </button>
+              <button
+                onClick={handleResetSchoolData}
+                disabled={isResettingSchoolData}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-rose-800/60 bg-rose-950/60 px-3.5 py-2 text-xs font-medium text-rose-200 shadow-sm transition-colors hover:bg-rose-900/80 md:flex-none"
+                title="Hapus data sekolah di PostgreSQL; akun admin tetap tersedia"
+              >
+                <AlertTriangle className={`w-3.5 h-3.5 ${isResettingSchoolData ? 'animate-pulse' : ''}`} />
+                <span>{isResettingSchoolData ? 'Mereset...' : 'Reset Data Sekolah'}</span>
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Top Statistics Counters */}
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mt-8 pt-6 border-t border-slate-800">
-          <div className="bg-slate-950/40 p-3 rounded-xl border border-slate-800">
-            <span className="text-slate-400 block text-[11px]">Total Siswa</span>
+        <div className="grid grid-cols-2 gap-3 mt-8 pt-6 border-t border-white/10 sm:grid-cols-3 xl:grid-cols-6">
+          <div className="bg-white/[0.06] p-4 rounded-xl border border-white/10 shadow-sm">
+            <span className="text-slate-300 block text-[11px] font-medium">Total Siswa</span>
             <span className="font-mono text-2xl font-bold text-white tabular-nums">
               {students.length} <span className="text-xs font-normal text-slate-400">Jiwa</span>
             </span>
           </div>
-          <div className="bg-slate-950/40 p-3 rounded-xl border border-slate-800">
-            <span className="text-slate-400 block text-[11px]">Direktori Guru</span>
-            <span className="font-mono text-2xl font-bold text-emerald-400 tabular-nums">
+          <div className="bg-white/[0.06] p-4 rounded-xl border border-white/10 shadow-sm">
+            <span className="text-slate-300 block text-[11px] font-medium">Direktori Guru</span>
+            <span className="font-mono text-2xl font-bold text-emerald-300 tabular-nums">
               {teachers.length} <span className="text-xs font-normal text-slate-400">Guru</span>
             </span>
           </div>
-          <div className="bg-slate-950/40 p-3 rounded-xl border border-slate-800">
-            <span className="text-slate-400 block text-[11px]">Pendaftar PPDB</span>
-            <span className="font-mono text-2xl font-bold text-amber-400 tabular-nums">
+          <div className="bg-white/[0.06] p-4 rounded-xl border border-white/10 shadow-sm">
+            <span className="text-slate-300 block text-[11px] font-medium">Pendaftar PPDB</span>
+            <span className="font-mono text-2xl font-bold text-amber-300 tabular-nums">
               {applicants.length} <span className="text-xs font-normal text-slate-400">Calon</span>
             </span>
           </div>
-          <div className="bg-slate-950/40 p-3 rounded-xl border border-slate-800">
-            <span className="text-slate-400 block text-[11px]">Warta / Pengumuman</span>
-            <span className="font-mono text-2xl font-bold text-blue-400 tabular-nums">
+          <div className="bg-white/[0.06] p-4 rounded-xl border border-white/10 shadow-sm">
+            <span className="text-slate-300 block text-[11px] font-medium">Warta / Pengumuman</span>
+            <span className="font-mono text-2xl font-bold text-sky-300 tabular-nums">
               {announcements.length} <span className="text-xs font-normal text-slate-400">Pos</span>
             </span>
           </div>
-          <div className="bg-slate-950/40 p-3 rounded-xl border border-slate-800">
-            <span className="text-slate-400 block text-[11px]">Galeri & Video</span>
-            <span className="font-mono text-2xl font-bold text-purple-400 tabular-nums">
+          <div className="bg-white/[0.06] p-4 rounded-xl border border-white/10 shadow-sm">
+            <span className="text-slate-300 block text-[11px] font-medium">Galeri & Video</span>
+            <span className="font-mono text-2xl font-bold text-violet-300 tabular-nums">
               {galleryItems.length + videos.length} <span className="text-xs font-normal text-slate-400">Item</span>
             </span>
           </div>
-          <div className="bg-slate-950/40 p-3 rounded-xl border border-slate-800">
-            <span className="text-slate-400 block text-[11px]">Akun Terdaftar</span>
-            <span className="font-mono text-2xl font-bold text-teal-400 tabular-nums">
+          <div className="bg-white/[0.06] p-4 rounded-xl border border-white/10 shadow-sm">
+            <span className="text-slate-300 block text-[11px] font-medium">Akun Terdaftar</span>
+            <span className="font-mono text-2xl font-bold text-teal-300 tabular-nums">
               {users.length} <span className="text-xs font-normal text-slate-400">User</span>
             </span>
           </div>
@@ -5537,6 +5626,53 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {isAdminProfileModalOpen && (
+        <div role="dialog" aria-modal="true" aria-labelledby="admin-profile-title" className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-slate-950/70 p-4 backdrop-blur-sm sm:items-center">
+          <div className="my-6 w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="bg-gradient-to-r from-slate-900 to-blue-950 px-6 py-5 text-white">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-blue-200">Pengaturan akun</p>
+              <h2 id="admin-profile-title" className="mt-1 text-xl font-bold">Profil Admin</h2>
+              <p className="mt-1 text-xs text-slate-300">Perbarui identitas dan foto yang ditampilkan di portal.</p>
+            </div>
+            <form onSubmit={handleSaveAdminProfile} className="space-y-5 p-6">
+              <div className="flex items-center gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <img
+                  src={getProfileAvatar({ ...currentUser, avatarUrl: adminProfileForm.avatarUrl || undefined })}
+                  alt="Pratinjau foto profil admin"
+                  className="h-20 w-20 rounded-full border-4 border-white object-cover shadow-md ring-1 ring-slate-200"
+                />
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">Foto profil</p>
+                  <label className="mt-2 inline-flex cursor-pointer items-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100">
+                    Pilih foto
+                    <input type="file" accept="image/jpeg,image/png" className="sr-only" onChange={handleAdminProfilePhotoChange} />
+                  </label>
+                  <p className="mt-1.5 text-[11px] text-slate-500">JPG atau PNG, maksimal 5 MB.</p>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <label htmlFor="admin-profile-name" className="text-xs font-semibold text-slate-700">Nama lengkap</label>
+                <input id="admin-profile-name" required maxLength={160} value={adminProfileForm.fullName} onChange={event => setAdminProfileForm(form => ({ ...form, fullName: event.target.value }))} className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-blue-800 focus:ring-2 focus:ring-blue-900/15" />
+              </div>
+              <div className="space-y-1.5">
+                <label htmlFor="admin-profile-email" className="text-xs font-semibold text-slate-700">Email</label>
+                <input id="admin-profile-email" type="email" maxLength={254} value={adminProfileForm.email} onChange={event => setAdminProfileForm(form => ({ ...form, email: event.target.value }))} className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-blue-800 focus:ring-2 focus:ring-blue-900/15" />
+              </div>
+              <p className="rounded-lg bg-blue-50 px-3 py-2.5 text-xs leading-relaxed text-blue-900">
+                Jika akun ini tertaut ke profil guru, nama, email, dan foto akan ikut diselaraskan dengan data guru tersebut.
+              </p>
+              {adminProfileError && <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2.5 text-xs text-rose-800">{adminProfileError}</p>}
+              <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+                <button type="button" onClick={() => setIsAdminProfileModalOpen(false)} disabled={isSavingAdminProfile} className="rounded-lg px-4 py-2.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:opacity-50">Batal</button>
+                <button type="submit" disabled={isSavingAdminProfile} className="rounded-lg bg-blue-900 px-5 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-800 disabled:cursor-wait disabled:opacity-60">
+                  {isSavingAdminProfile ? 'Menyimpan…' : 'Simpan Profil'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

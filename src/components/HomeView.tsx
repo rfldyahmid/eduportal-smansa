@@ -343,11 +343,11 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
               </div>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                 {SCHOOL_MISSIONS.slice(0, 3).map((misi, index) => (
-                  <div key={misi} className="flex gap-3 rounded-lg border border-slate-100 bg-slate-50/80 p-4">
-                    <span className="font-mono text-sm font-bold text-amber-700">
+                  <div key={misi} className="flex gap-3 rounded-lg border border-slate-100 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-900">
+                    <span className="font-mono text-sm font-bold text-amber-700 dark:text-amber-300">
                       {String(index + 1).padStart(2, '0')}
                     </span>
-                    <p className="text-sm leading-relaxed text-slate-700">{misi}</p>
+                    <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-200">{misi}</p>
                   </div>
                 ))}
               </div>

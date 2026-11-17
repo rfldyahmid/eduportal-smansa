@@ -189,6 +189,14 @@ export async function updateManagedUser(id: string, input: {
   return apiRequest(`/users/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(input) });
 }
 
+export async function updateOwnAdminProfile(input: {
+  fullName: string;
+  email: string;
+  avatarUrl: string;
+}): Promise<{ user: UserAccount; message: string }> {
+  return apiRequest('/auth/profile', { method: 'PUT', body: JSON.stringify(input) });
+}
+
 export async function bulkDeleteManagedUsers(ids: string[]): Promise<{ message: string; removedCount: number }> {
   return apiRequest('/users', { method: 'DELETE', body: JSON.stringify({ ids }) });
 }

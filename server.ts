@@ -636,6 +636,47 @@ app.get('/api/auth/me', requireAuth, async (req: AuthenticatedRequest, res) => {
   });
 });
 
+app.put('/api/auth/profile', requireAuth, async (req: AuthenticatedRequest, res) => {
+  const db = await getDb();
+  const user = db.users.find(item => item.id === req.user?.sub);
+  if (!user) return res.status(404).json({ message: 'Pengguna tidak ditemukan.' });
+  if (user.role !== 'admin') {
+    return res.status(403).json({ message: 'Pengaturan profil ini hanya tersedia untuk akun admin.' });
+  }
+
+  const fullName = String(req.body?.fullName || '').trim();
+  const email = String(req.body?.email || '').trim();
+  if (!fullName || fullName.length > 160) {
+    return res.status(400).json({ message: 'Nama lengkap wajib diisi dan maksimal 160 karakter.' });
+  }
+  if (email && (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
+    return res.status(400).json({ message: 'Format email tidak valid.' });
+  }
+
+  user.fullName = fullName;
+  user.email = email;
+  if (typeof req.body?.avatarUrl === 'string') {
+    const avatarUrl = req.body.avatarUrl.trim();
+    if (avatarUrl.startsWith('data:image/')) {
+      user.avatarUrl = await persistImage(avatarUrl, 'profile');
+    } else if (!avatarUrl || /^https?:\/\//i.test(avatarUrl)) {
+      user.avatarUrl = avatarUrl || undefined;
+    } else {
+      return res.status(400).json({ message: 'Format foto profil tidak valid.' });
+    }
+  }
+
+  const linkedTeacher = db.teachers.find(item => item.id === user.linkedId || item.nip === user.username);
+  if (linkedTeacher) {
+    linkedTeacher.fullName = user.fullName;
+    linkedTeacher.email = user.email;
+    if (user.avatarUrl !== undefined) linkedTeacher.photoUrl = user.avatarUrl;
+  }
+  await saveDb();
+  const { passwordHash: _passwordHash, salt: _salt, ...safeUser } = user;
+  res.json({ user: safeUser, message: 'Profil admin berhasil diperbarui.' });
+});
+
 app.post('/api/auth/change-password', requireAuth, async (req: AuthenticatedRequest, res) => {
   const { oldPassword, newPassword } = req.body || {};
   if (!newPassword || String(newPassword).length < 12) {
@@ -1831,7 +1872,12 @@ app.post('/api/admin/roster/import', requireAdmin, async (req, res) => {
     const classesTaught: string[] = classesRaw.map((value: unknown): string =>
       normalizeSchoolClassId(String(value || '').trim())
     );
-    const homeroomInput = String(row.homeroomClass || '').trim();
+    const inferredHomeroomClass = row.classesTaughtProvided === true && classesTaught.length === 1
+      ? classesTaught[0]
+      : '';
+    const homeroomInput = row.homeroomClassProvided === true
+      ? String(row.homeroomClass || '').trim()
+      : inferredHomeroomClass;
     const homeroomClass = homeroomInput ? normalizeSchoolClassId(homeroomInput) : '';
     if (
       !nip || !fullName || !subject || (email && !emailPattern.test(email)) ||
@@ -1867,8 +1913,14 @@ app.post('/api/admin/roster/import', requireAdmin, async (req, res) => {
       fullName,
       degree: String(row.degree || '').trim() || existing?.degree || '',
       subject,
-      classesTaught: [...new Set(classesTaught.length ? classesTaught : existing?.classesTaught || [])],
-      homeroomClass: homeroomClass || existing?.homeroomClass || '',
+      classesTaught: [...new Set(
+        row.classesTaughtProvided === true
+          ? classesTaught
+          : existing?.classesTaught || classesTaught
+      )],
+      homeroomClass: row.homeroomClassProvided === true
+        ? homeroomClass
+        : existing?.homeroomClass || homeroomClass,
       education: String(row.education || '').trim() || existing?.education || '',
       email: email || existing?.email || linkedUser?.email || '',
       phone: String(row.phone || '').trim() || existing?.phone || '-',

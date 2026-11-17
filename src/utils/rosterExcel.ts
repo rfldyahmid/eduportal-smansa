@@ -9,7 +9,12 @@ export type StudentImportRow = Omit<Student, 'id' | 'className' | 'nis' | 'acade
   academicYear?: string;
   sourceRow?: number;
 };
-export type TeacherImportRow = Omit<Teacher, 'id' | 'photoUrl'> & { photoUrl?: string; sourceRow?: number };
+export type TeacherImportRow = Omit<Teacher, 'id' | 'photoUrl'> & {
+  photoUrl?: string;
+  sourceRow?: number;
+  classesTaughtProvided?: boolean;
+  homeroomClassProvided?: boolean;
+};
 
 export interface ParsedRosterWorkbook {
   students: StudentImportRow[];
@@ -27,7 +32,7 @@ const STUDENT_HEADERS = [
 ];
 const TEACHER_HEADERS = [
   'NIP', 'Nama Lengkap', 'Gelar', 'Mata Pelajaran / Jabatan',
-  'Email', 'Telepon', 'Kelas Diampu'
+  'Email', 'Telepon', 'Kelas Diampu', 'Kelas Wali (Opsional)'
 ];
 
 const normalizeHeader = (value: string) => value
@@ -96,7 +101,12 @@ function readRows(workbook: ExcelJS.Workbook, sheetName: string, aliases: Record
 
   const headers = new Map<number, string>();
   sheet.getRow(1).eachCell((cell, column) => {
-    const key = aliases[normalizeHeader(cellText(cell.value))];
+    const normalizedHeader = normalizeHeader(cellText(cell.value));
+    // Accept instructional suffixes such as "Kelas Diampu (pisahkan dengan koma)".
+    const key = aliases[normalizedHeader] ||
+      (sheetName !== 'Siswa' && /^(kelasdiampu|kelasyangdiampu|kelasajar)/.test(normalizedHeader)
+        ? 'classesTaught'
+        : undefined);
     if (key) headers.set(column, key);
   });
   const requiredHeaders = sheetName === 'Siswa'
@@ -151,25 +161,40 @@ const TEACHER_ALIASES: Record<string, string> = {
   matapelajaranjabatan: 'subject', subject: 'subject',
   email: 'email', emailaktif: 'email', telepon: 'phone', notelepon: 'phone', phone: 'phone',
   kelasdiampu: 'classesTaught',
-  kelasajar: 'classesTaught', kelasyangdiampu: 'classesTaught', walikelas: 'homeroomClass',
+  kelasajar: 'classesTaught', kelasyangdiampu: 'classesTaught',
+  kelaswali: 'homeroomClass', walikelas: 'homeroomClass', kelashomeroom: 'homeroomClass',
   bio: 'bio', biografi: 'bio'
 };
 
 function mapTeacherRows(rows: Record<string, string>[]): TeacherImportRow[] {
-  return rows.map(row => ({
-    nip: row.nip,
-    fullName: row.fullName,
-    degree: row.degree || '',
-    subject: getCanonicalTeacherSubject(row.subject) || row.subject,
-    classesTaught: row.classesTaught ? row.classesTaught.split(/[,;]/).map(value => value.trim()).filter(Boolean) : [],
-    homeroomClass: '',
-    education: '',
-    email: row.email || '',
-    phone: row.phone || '',
-    photoUrl: '',
-    bio: '',
-    sourceRow: Number(row.__rowNumber)
-  }));
+  return rows.map(row => {
+    const classesTaught = row.classesTaught
+      ? row.classesTaught.split(/[,;\n\r]+/).map(value => value.trim()).filter(Boolean)
+      : [];
+    const classesTaughtProvided = Object.prototype.hasOwnProperty.call(row, 'classesTaught');
+    const hasHomeroomColumn = Object.prototype.hasOwnProperty.call(row, 'homeroomClass');
+    const homeroomClassProvided = hasHomeroomColumn ||
+      (classesTaughtProvided && classesTaught.length === 1);
+    return {
+      nip: row.nip,
+      fullName: row.fullName,
+      degree: row.degree || '',
+      subject: getCanonicalTeacherSubject(row.subject) || row.subject,
+      classesTaught,
+      // A present but blank column means clear the assignment; an absent column means preserve it.
+      classesTaughtProvided,
+      homeroomClassProvided,
+      // Older templates only had Kelas Diampu, so a single listed class also
+      // supplies the wali class for compatibility with completed files.
+      homeroomClass: hasHomeroomColumn ? row.homeroomClass : classesTaught.length === 1 ? classesTaught[0] : '',
+      education: '',
+      email: row.email || '',
+      phone: row.phone || '',
+      photoUrl: '',
+      bio: '',
+      sourceRow: Number(row.__rowNumber)
+    };
+  });
 }
 
 export async function parseRosterWorkbook(file: File): Promise<ParsedRosterWorkbook> {
@@ -246,8 +271,9 @@ export async function downloadRosterTemplate(): Promise<void> {
   teachers.addRow(TEACHER_HEADERS);
   teachers.getColumn(1).numFmt = '@';
   teachers.getColumn(7).numFmt = '@';
+  teachers.getColumn(8).numFmt = '@';
   teachers.views = [{ state: 'frozen', ySplit: 1 }];
-  teachers.autoFilter = { from: 'A1', to: 'G1' };
+  teachers.autoFilter = { from: 'A1', to: 'H1' };
 
   for (const sheet of workbook.worksheets) {
     sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
@@ -266,8 +292,9 @@ export async function downloadTeacherTemplate(): Promise<void> {
   teachers.addRow(TEACHER_HEADERS);
   teachers.getColumn(1).numFmt = '@';
   teachers.getColumn(7).numFmt = '@';
+  teachers.getColumn(8).numFmt = '@';
   teachers.views = [{ state: 'frozen', ySplit: 1 }];
-  teachers.autoFilter = { from: 'A1', to: 'G1' };
+  teachers.autoFilter = { from: 'A1', to: 'H1' };
   teachers.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
   teachers.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } };
   teachers.columns.forEach(column => { column.width = 22; });

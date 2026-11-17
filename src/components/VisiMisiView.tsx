@@ -55,11 +55,11 @@ export const VisiMisiView: React.FC<VisiMisiViewProps> = ({ onNavigate }) => {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {SCHOOL_MISSIONS.map((misi, index) => (
-            <div key={misi} className="bg-slate-50/80 p-6 rounded-xl border border-slate-100 hover:border-amber-200 hover:shadow-md transition-all space-y-3">
+            <div key={misi} className="bg-slate-50/80 p-6 rounded-xl border border-slate-100 hover:border-amber-200 hover:shadow-md transition-all space-y-3 dark:bg-slate-800 dark:border-slate-700 dark:hover:border-amber-500">
               <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center font-bold font-mono">
                 {String(index + 1).padStart(2, '0')}
               </div>
-              <p className="text-sm text-slate-700 leading-relaxed">{misi}</p>
+              <p className="text-sm text-slate-700 leading-relaxed dark:text-slate-200">{misi}</p>
             </div>
           ))}
         </div>

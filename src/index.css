@@ -334,26 +334,50 @@
 
 .dark [class~="text-blue-950"]:not([class*="dark:text-"]),
 .dark [class~="text-blue-900"]:not([class*="dark:text-"]),
+.dark [class~="text-blue-800"]:not([class*="dark:text-"]),
+.dark [class~="text-blue-700"]:not([class*="dark:text-"]),
+.dark [class~="text-indigo-800"]:not([class*="dark:text-"]),
+.dark [class~="text-indigo-700"]:not([class*="dark:text-"]),
 .dark [class~="text-indigo-900"]:not([class*="dark:text-"]) {
   color: #bfdbfe;
 }
 
 .dark [class~="text-emerald-900"]:not([class*="dark:text-"]),
+.dark [class~="text-emerald-800"]:not([class*="dark:text-"]),
+.dark [class~="text-emerald-700"]:not([class*="dark:text-"]),
+.dark [class~="text-emerald-600"]:not([class*="dark:text-"]),
+.dark [class~="text-green-800"]:not([class*="dark:text-"]),
+.dark [class~="text-green-700"]:not([class*="dark:text-"]),
+.dark [class~="text-green-600"]:not([class*="dark:text-"]),
 .dark [class~="text-green-900"]:not([class*="dark:text-"]) {
   color: #a7f3d0;
 }
 
 .dark [class~="text-amber-900"]:not([class*="dark:text-"]),
+.dark [class~="text-amber-800"]:not([class*="dark:text-"]),
+.dark [class~="text-amber-700"]:not([class*="dark:text-"]),
+.dark [class~="text-amber-600"]:not([class*="dark:text-"]),
+.dark [class~="text-amber-500"]:not([class*="dark:text-"]),
 .dark [class~="text-yellow-900"]:not([class*="dark:text-"]) {
   color: #fde68a;
 }
 
 .dark [class~="text-rose-900"]:not([class*="dark:text-"]),
+.dark [class~="text-rose-800"]:not([class*="dark:text-"]),
+.dark [class~="text-rose-700"]:not([class*="dark:text-"]),
+.dark [class~="text-rose-600"]:not([class*="dark:text-"]),
+.dark [class~="text-rose-500"]:not([class*="dark:text-"]),
+.dark [class~="text-red-800"]:not([class*="dark:text-"]),
+.dark [class~="text-red-700"]:not([class*="dark:text-"]),
+.dark [class~="text-red-600"]:not([class*="dark:text-"]),
 .dark [class~="text-red-900"]:not([class*="dark:text-"]) {
   color: #fda4af;
 }
 
 .dark [class~="text-purple-900"]:not([class*="dark:text-"]),
+.dark [class~="text-purple-800"]:not([class*="dark:text-"]),
+.dark [class~="text-purple-700"]:not([class*="dark:text-"]),
+.dark [class~="text-violet-800"]:not([class*="dark:text-"]),
 .dark [class~="text-violet-900"]:not([class*="dark:text-"]) {
   color: #ddd6fe;
 }

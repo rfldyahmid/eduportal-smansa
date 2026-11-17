@@ -3,7 +3,6 @@ import {
   CalendarDays,
   ClipboardList,
   Megaphone,
-  UserRound,
   Clock3,
   MapPin,
   ChevronRight,
@@ -20,6 +19,7 @@ import { Student, UserAccount, ScheduleItem, Assignment, PortalAnnouncement, Ass
 import { fetchMyStudentProfile, fetchStudentNotificationReads, markStudentNotificationsRead, fetchAssignments, fetchPortalAnnouncements, fetchSubmissions, submitAssignment, fetchSchedules } from '../../utils/api';
 import { PrintScheduleModal } from '../PrintScheduleModal';
 import { PortalAnnouncementAttachments } from './PortalAnnouncementAttachments';
+import { getProfileAvatar } from '../../utils/profileAvatar';
 
 interface StudentPortalProps {
   currentUser: UserAccount;
@@ -272,8 +272,12 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ currentUser, onLog
       <div className="min-w-0 rounded-2xl bg-slate-900 p-4 text-white shadow-xl sm:p-8">
         <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
           <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-2 border-amber-300/70 bg-gradient-to-br from-amber-100 to-blue-100 shadow-inner">
-              <UserRound aria-hidden="true" className="h-8 w-8 text-blue-950" strokeWidth={1.75} />
+            <div className="h-16 w-16 shrink-0 rounded-full bg-white p-1 shadow-lg ring-1 ring-white/40 sm:h-20 sm:w-20">
+              <img
+                src={getProfileAvatar(currentUser)}
+                alt={currentUser.avatarUrl ? `Foto profil ${currentUser.fullName}` : `Avatar profil ${currentUser.gender || 'siswa'}`}
+                className="h-full w-full rounded-full object-cover"
+              />
             </div>
             <div className="min-w-0">
               <p className="text-xs font-semibold text-amber-300">Selamat datang</p>
