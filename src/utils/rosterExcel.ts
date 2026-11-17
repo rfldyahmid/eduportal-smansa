@@ -16,7 +16,7 @@ const STUDENT_HEADERS = [
 ];
 const TEACHER_HEADERS = [
   'NIP', 'Nama Lengkap', 'Gelar', 'Mata Pelajaran / Jabatan',
-  'Email', 'Telepon', 'Pendidikan', 'Kelas Diampu', 'Wali Kelas', 'Bio'
+  'Email', 'Telepon', 'Kelas Diampu', 'Wali Kelas', 'Bio'
 ];
 
 const normalizeHeader = (value: string) => value
@@ -95,7 +95,7 @@ const TEACHER_ALIASES: Record<string, string> = {
   gelar: 'degree', degree: 'degree', matapelajaran: 'subject', jabatan: 'subject',
   matapelajaranjabatan: 'subject', subject: 'subject',
   email: 'email', emailaktif: 'email', telepon: 'phone', notelepon: 'phone', phone: 'phone',
-  pendidikan: 'education', education: 'education', kelasdiampu: 'classesTaught',
+  kelasdiampu: 'classesTaught',
   kelasajar: 'classesTaught', kelasyangdiampu: 'classesTaught', walikelas: 'homeroomClass',
   bio: 'bio', biografi: 'bio'
 };
@@ -134,7 +134,7 @@ export async function parseRosterWorkbook(file: File): Promise<ParsedRosterWorkb
       subject: getCanonicalTeacherSubject(row.subject) || row.subject,
       classesTaught: row.classesTaught ? row.classesTaught.split(/[,;]/).map(value => value.trim()).filter(Boolean) : [],
       homeroomClass: row.homeroomClass || '',
-      education: row.education || '',
+      education: '',
       email: row.email,
       phone: row.phone || '-',
       photoUrl: '',
@@ -160,7 +160,7 @@ export async function downloadRosterTemplate(): Promise<void> {
   teachers.getColumn(1).numFmt = '@';
   teachers.getColumn(6).numFmt = '@';
   teachers.views = [{ state: 'frozen', ySplit: 1 }];
-  teachers.autoFilter = { from: 'A1', to: 'J1' };
+  teachers.autoFilter = { from: 'A1', to: 'I1' };
 
   for (const sheet of workbook.worksheets) {
     sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };

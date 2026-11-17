@@ -90,6 +90,22 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ onNavigate, currentUse
     setActivePhotoIndex((prev) => (prev - 1 + allImagesForActive.length) % allImagesForActive.length);
   };
 
+  useEffect(() => {
+    if (!activePhoto && !activeVideo) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setActivePhoto(null);
+        setActiveVideo(null);
+      } else if (activePhoto && allImagesForActive.length > 1 && event.key === 'ArrowRight') {
+        setActivePhotoIndex(index => (index + 1) % allImagesForActive.length);
+      } else if (activePhoto && allImagesForActive.length > 1 && event.key === 'ArrowLeft') {
+        setActivePhotoIndex(index => (index - 1 + allImagesForActive.length) % allImagesForActive.length);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activePhoto, activeVideo, allImagesForActive.length]);
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-8 py-10 lg:py-16 space-y-10">
       {/* Header & Breadcrumb */}

@@ -40,17 +40,11 @@ export const VisiMisiView: React.FC<VisiMisiViewProps> = ({ onNavigate }) => {
             “Terwujudnya peserta didik yang beriman, berakhlak mulia, berkarakter, unggul dalam prestasi, literat, kreatif, mandiri, peduli lingkungan, serta adaptif terhadap perkembangan teknologi untuk menghadapi tantangan masa depan.”
           </blockquote>
 
-          <p className="text-slate-300 text-xs sm:text-sm leading-relaxed max-w-2xl pt-2">
-            Visi ini menjadi komitmen luhur warga sekolah di Weda dalam membimbing putra-putri Halmahera Tengah agar menguasai keunggulan akademik, sains terapan, serta menjunjung tinggi nilai budaya luhur daerah.
-          </p>
         </div>
       </section>
       {/* 2. MISI SEKOLAH */}
       <section className="space-y-6">
         <div className="space-y-1">
-          <span className="text-xs font-semibold uppercase tracking-wider text-blue-900">
-            Pilar Kerja
-          </span>
           <h2 className="font-serif-title text-2xl font-bold text-slate-900">
             Misi SMA Negeri 1 Halmahera Tengah
           </h2>

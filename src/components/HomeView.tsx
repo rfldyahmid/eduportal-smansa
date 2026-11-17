@@ -4,9 +4,12 @@ import { getCurrentAcademicYear } from '../utils/academicYear';
 import { IMAGES } from '../assets/images';
 import { LatestAnnouncements } from './LatestAnnouncements';
 import { ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
-import { GalleryPhoto } from '../types';
-import { fetchGallery, fetchHomeHeroSlides } from '../utils/api';
+import { GalleryPhoto, HomeStats } from '../types';
+import { fetchGallery, fetchHomeHeroSlides, fetchHomeStats } from '../utils/api';
 import { SCHOOL_MISSIONS } from '../utils/schoolMissions';
+
+const formatStatCount = (value: number | undefined) =>
+  value === undefined ? '—' : new Intl.NumberFormat('id-ID').format(value);
 
 interface HomeViewProps {
   onNavigate: (tab: string) => void;
@@ -15,11 +18,43 @@ interface HomeViewProps {
 export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
   const academicYear = getCurrentAcademicYear();
   const [heroImages, setHeroImages] = useState<string[]>([IMAGES.heroSchool]);
+  const [homeStats, setHomeStats] = useState<HomeStats | null>(null);
+  const [homeStatsError, setHomeStatsError] = useState(false);
   const [galleryItems, setGalleryItems] = useState<GalleryPhoto[]>([]);
   const [galleryLoading, setGalleryLoading] = useState(true);
   const [galleryError, setGalleryError] = useState(false);
   const [activeHeroIndex, setActiveHeroIndex] = useState(0);
   const touchStartX = useRef<number | null>(null);
+
+  useEffect(() => {
+    let isLoading = false;
+    const refreshStats = async () => {
+      if (isLoading || document.visibilityState === 'hidden') return;
+      isLoading = true;
+      try {
+        setHomeStats(await fetchHomeStats());
+        setHomeStatsError(false);
+      } catch (error) {
+        console.error('Gagal memuat statistik sekolah untuk beranda:', error);
+        setHomeStatsError(true);
+      } finally {
+        isLoading = false;
+      }
+    };
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void refreshStats();
+    };
+
+    void refreshStats();
+    const intervalId = window.setInterval(refreshStats, 30_000);
+    window.addEventListener('focus', refreshStats);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshStats);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, []);
 
   useEffect(() => {
     const loadGallery = () => {
@@ -151,29 +186,34 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
       <section className="max-w-7xl mx-auto px-4 sm:px-8 -mt-10 lg:-mt-16 relative z-10">
         <div className="bg-white rounded-xl shadow-xl border border-slate-200/80 p-4 sm:p-6 lg:p-8 grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
           <div className="border-l-2 border-blue-900 pl-4 space-y-1">
-            <span className="font-mono text-2xl sm:text-3xl font-bold text-slate-900 tabular-nums">1.280+</span>
+            <span className="font-mono text-2xl sm:text-3xl font-bold text-slate-900 tabular-nums">{formatStatCount(homeStats?.students)}</span>
             <p className="text-xs sm:text-sm text-slate-600 font-medium">Peserta Didik Aktif</p>
-            <span className="text-[11px] text-slate-400 block">Tersebar di 36 Rombel</span>
+            <span className="text-[11px] text-slate-400 block">Data siswa terdaftar</span>
           </div>
 
           <div className="border-l-2 border-amber-500 pl-4 space-y-1">
-            <span className="font-mono text-2xl sm:text-3xl font-bold text-slate-900 tabular-nums">78</span>
+            <span className="font-mono text-2xl sm:text-3xl font-bold text-slate-900 tabular-nums">{formatStatCount(homeStats?.teachers)}</span>
             <p className="text-xs sm:text-sm text-slate-600 font-medium">Pendidik Berdedikasi</p>
-            <span className="text-[11px] text-slate-400 block">72% Berpendidikan S2 & S3</span>
+            <span className="text-[11px] text-slate-400 block">Guru dan staf terdaftar</span>
           </div>
 
           <div className="border-l-2 border-emerald-600 pl-4 space-y-1">
-            <span className="font-mono text-2xl sm:text-3xl font-bold text-slate-900 tabular-nums">100%</span>
-            <p className="text-xs sm:text-sm text-slate-600 font-medium">Kelulusan Siswa</p>
-            <span className="text-[11px] text-slate-400 block">94% Lolos PTN Favorit & Kedinasan</span>
+            <span className="font-mono text-2xl sm:text-3xl font-bold text-slate-900 tabular-nums">{formatStatCount(homeStats?.announcements)}</span>
+            <p className="text-xs sm:text-sm text-slate-600 font-medium">Pengumuman Sekolah</p>
+            <span className="text-[11px] text-slate-400 block">Informasi yang dipublikasikan</span>
           </div>
 
           <div className="border-l-2 border-purple-600 pl-4 space-y-1">
-            <span className="font-mono text-2xl sm:text-3xl font-bold text-slate-900 tabular-nums">42</span>
-            <p className="text-xs sm:text-sm text-slate-600 font-medium">Medali OSN & Riset</p>
-            <span className="text-[11px] text-slate-400 block">Tingkat Provinsi & Nasional</span>
+            <span className="font-mono text-2xl sm:text-3xl font-bold text-slate-900 tabular-nums">{formatStatCount(homeStats?.gallery)}</span>
+            <p className="text-xs sm:text-sm text-slate-600 font-medium">Album Galeri</p>
+            <span className="text-[11px] text-slate-400 block">Dokumentasi kegiatan sekolah</span>
           </div>
         </div>
+        {homeStatsError && (
+          <p role="status" className="mt-2 text-center text-xs text-slate-500">
+            Statistik belum dapat diperbarui. Akan dicoba kembali secara otomatis.
+          </p>
+        )}
       </section>
 
       {/* 3. SAMBUTAN SINGKAT KEPALA SEKOLAH (TEASER) */}
@@ -351,49 +391,6 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
         </div>
       </section>
 
-      {/* 6. TESTIMONIAL ALUMNI (CLAIM-TO-PROOF ADJACENCY) */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-8 space-y-6">
-        <div className="text-center max-w-xl mx-auto space-y-1">
-          <span className="text-xs font-semibold uppercase tracking-wider text-blue-900">
-            Jejak Alumni
-          </span>
-          <h2 className="font-serif-title text-2xl font-bold text-slate-900">
-            Kisah Sukses Lulusan SMAN 1 Halmahera Tengah
-          </h2>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white p-6 rounded-xl border border-slate-200 space-y-4">
-            <p className="text-slate-600 text-xs sm:text-sm italic leading-relaxed">
-              "Pondasi sains analitis dan motivasi para guru di Weda sangat berperan besar dalam memudahkan adaptasi perkuliahan kedokteran saya di Unhas. Nilai budi pekerti Fagogoru selalu saya jaga di perantauan."
-            </p>
-            <div className="border-t border-slate-100 pt-3">
-              <h4 className="text-xs font-bold text-slate-900">drg. Nurul Syahfitri</h4>
-              <p className="text-[11px] text-slate-500">Alumni 2020 · Dokter Gigi Muda / Penerima Beasiswa Daerah Halteng</p>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-xl border border-slate-200 space-y-4">
-            <p className="text-slate-600 text-xs sm:text-sm italic leading-relaxed">
-              "Lab komputer dan bimbingan guru fisika SMAN 1 Halteng membuka jalan karier saya di bidang keteknikan dan pengolahan industri strategis. Lulusan Halmahera Tengah mampu bersaing di tingkat nasional."
-            </p>
-            <div className="border-t border-slate-100 pt-3">
-              <h4 className="text-xs font-bold text-slate-900">Fikram Hi. Ahmad, S.T.</h4>
-              <p className="text-[11px] text-slate-500">Alumni 2021 · Mining & Electrical Engineer di Kawasan Weda Bay</p>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-xl border border-slate-200 space-y-4">
-            <p className="text-slate-600 text-xs sm:text-sm italic leading-relaxed">
-              "Pelatihan kepemimpinan di OSIS dan Paskibra SMAN 1 Halmahera Tengah membentuk mental disiplin tangguh yang mengantarkan saya lolos seleksi Akademi Angkatan Laut (AAL)."
-            </p>
-            <div className="border-t border-slate-100 pt-3">
-              <h4 className="text-xs font-bold text-slate-900">Letda Laut (P) Muhammad Rizky</h4>
-              <p className="text-[11px] text-slate-500">Alumni 2019 · Perwira Pertama TNI AL / Lulusan Akademi Angkatan Laut</p>
-            </div>
-          </div>
-        </div>
-      </section>
     </div>
   );
 };

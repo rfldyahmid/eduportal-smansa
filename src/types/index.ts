@@ -43,6 +43,22 @@ export interface Teacher {
   bio: string;
 }
 
+export interface AlumniProfile {
+  id: string;
+  name: string;
+  job: string;
+  graduationYear: number;
+  photo?: string;
+  createdAt?: string;
+}
+
+export interface HomeStats {
+  students: number;
+  teachers: number;
+  announcements: number;
+  gallery: number;
+}
+
 export interface ScheduleItem {
   id: string;
   day: 'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat' | 'Sabtu';

@@ -110,6 +110,7 @@ import {
   Check,
   Clock,
   UserCheck,
+  Eye,
   ExternalLink,
   HelpCircle,
   Layers,
@@ -226,6 +227,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [searchTeacher, setSearchTeacher] = useState('');
   const [isTeacherModalOpen, setIsTeacherModalOpen] = useState(false);
+  const [isTeacherPreviewOpen, setIsTeacherPreviewOpen] = useState(false);
   const [editingTeacher, setEditingTeacher] = useState<Teacher | null>(null);
   const [teacherForm, setTeacherForm] = useState<Omit<Teacher, 'id'> & { homeroomClass: string }>({
     nip: '',
@@ -676,6 +678,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
 
   const handleOpenAddTeacher = () => {
     setEditingTeacher(null);
+    setIsTeacherPreviewOpen(false);
     setTeacherForm({
       nip: '',
       fullName: '',
@@ -683,17 +686,18 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
       subject: '',
       classesTaught: ['X-A'],
       homeroomClass: '',
-      education: 'S1 Pendidikan, Universitas Khairun (Unkhair)',
+      education: '',
       email: '',
       phone: '+62 812-',
       photoUrl: '',
-      bio: 'Guru pembimbing berdedikasi tinggi di SMAN 1 Halmahera Tengah.'
+      bio: ''
     });
     setIsTeacherModalOpen(true);
   };
 
   const handleOpenEditTeacher = (tch: Teacher) => {
     setEditingTeacher(tch);
+    setIsTeacherPreviewOpen(false);
     setTeacherForm({
       nip: tch.nip,
       fullName: tch.fullName,
@@ -2184,7 +2188,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                     <th className="py-3 px-4">Nama Lengkap & Gelar</th>
                     <th className="py-3 px-3">NIP</th>
                     <th className="py-3 px-3">Mata Pelajaran / Jabatan</th>
-                    <th className="py-3 px-3">Pendidikan Terakhir</th>
                     <th className="py-3 px-3">Kontak</th>
                     <th className="py-3 px-4 text-right">Aksi</th>
                   </tr>
@@ -2192,7 +2195,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                 <tbody className="divide-y divide-slate-200 font-sans">
                   {filteredTeachers.length === 0 ? (
                     <tr>
-                      <td colSpan={isBulkMode('teachers') ? 8 : 7} className="py-8 text-center text-slate-400">
+                      <td colSpan={isBulkMode('teachers') ? 7 : 6} className="py-8 text-center text-slate-400">
                         Tidak ada guru ditemukan dengan kriteria tersebut.
                       </td>
                     </tr>
@@ -2224,9 +2227,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                         </td>
                         <td className="py-3 px-3 font-mono text-slate-600">{tch.nip.replace(/\s+/g, '')}</td>
                         <td className="py-3 px-3 font-medium text-slate-800">{tch.subject}</td>
-                        <td className="py-3 px-3 text-slate-600 text-[11px] max-w-[180px] truncate">
-                          {tch.education}
-                        </td>
                         <td className="py-3 px-3 font-mono text-[11px] text-slate-500">
                           <div>{tch.email}</div>
                           <div>{tch.phone}</div>
@@ -4077,9 +4077,21 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
               <h3 className="font-serif-title text-lg font-bold text-slate-900">
                 {editingTeacher ? 'Edit Data Guru & Pendidik' : 'Tambah Tenaga Pendidik Baru'}
               </h3>
-              <button onClick={() => setIsTeacherModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsTeacherPreviewOpen(open => !open)}
+                  disabled={!teacherForm.photoUrl}
+                  aria-expanded={isTeacherPreviewOpen}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 px-2.5 py-1.5 text-xs font-semibold text-blue-900 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  {isTeacherPreviewOpen ? 'Tutup Pratinjau' : 'Pratinjau Foto'}
+                </button>
+                <button type="button" onClick={() => setIsTeacherModalOpen(false)} aria-label="Tutup formulir guru" className="p-1 text-slate-400 hover:text-slate-600">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             <form onSubmit={handleSaveTeacher} className="space-y-4">
@@ -4171,17 +4183,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                 <p className="text-[11px] text-slate-500">Penugasan ini hanya dapat diubah oleh admin.</p>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-700">Riwayat Pendidikan</label>
-                <input
-                  type="text"
-                  placeholder="Contoh: S1 Pendidikan Kimia, Universitas Khairun (Unkhair) Ternate"
-                  value={teacherForm.education}
-                  onChange={e => setTeacherForm({ ...teacherForm, education: e.target.value })}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg"
-                />
-              </div>
-
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
                   <label className="text-xs font-semibold text-slate-700">Email Sekolah</label>
@@ -4224,16 +4225,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
                 <p className="text-[11px] text-slate-500">Pilih file JPG atau PNG, maksimal 5 MB. Kosongkan jika foto tidak ingin diganti.</p>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-700">Biografi Singkat</label>
-                <textarea
-                  rows={2}
-                  value={teacherForm.bio}
-                  onChange={e => setTeacherForm({ ...teacherForm, bio: e.target.value })}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg"
-                />
-              </div>
-
               <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
                 <button
                   type="button"
@@ -4251,6 +4242,30 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
               </div>
             </form>
           </div>
+          {isTeacherPreviewOpen && teacherForm.photoUrl && (
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Pratinjau foto profil"
+              className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 p-4"
+              onClick={() => setIsTeacherPreviewOpen(false)}
+            >
+              <button
+                type="button"
+                onClick={() => setIsTeacherPreviewOpen(false)}
+                aria-label="Tutup pratinjau foto"
+                className="absolute right-4 top-4 rounded-full bg-black/50 p-2 text-white hover:bg-black/70"
+              >
+                <X className="h-6 w-6" />
+              </button>
+              <img
+                src={teacherForm.photoUrl}
+                alt="Pratinjau foto profil"
+                className="aspect-[5/6] w-[360px] max-h-[80vh] max-w-[90vw] object-cover"
+                onClick={event => event.stopPropagation()}
+              />
+            </div>
+          )}
         </div>
       )}
 

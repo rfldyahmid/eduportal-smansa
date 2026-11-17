@@ -17,7 +17,8 @@ import {
   PortalAnnouncement,
   UserAccount,
   UserRole,
-  Gender
+  Gender,
+  HomeStats
 } from '../types';
 import type { StudentImportRow, TeacherImportRow } from './rosterExcel';
 
@@ -89,6 +90,14 @@ export async function apiAdminLogin(username: string, password: string): Promise
 
 export async function apiGetMe(): Promise<UserAccount> {
   return apiRequest<UserAccount>('/auth/me');
+}
+
+export async function fetchHomeStats(): Promise<HomeStats> {
+  const stats = await apiRequest<HomeStats>('/health', { cache: 'no-store' });
+  if (![stats.students, stats.teachers, stats.announcements, stats.gallery].every(Number.isFinite)) {
+    throw new Error('Respons statistik sekolah dari server tidak valid.');
+  }
+  return stats;
 }
 
 export async function apiChangePassword(oldPassword: string, newPassword: string): Promise<{ message: string; token: string; user: UserAccount }> {

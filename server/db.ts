@@ -7,6 +7,7 @@ import type {
   ContactMessage,
   ContactInfo,
   Announcement,
+  AlumniProfile,
   GalleryPhoto,
   YouTubeVideo,
   KombelActivity,
@@ -33,6 +34,7 @@ export interface DatabaseSchema {
   messages: ContactMessage[];
   contactInfo: ContactInfo;
   announcements: Announcement[];
+  alumni: AlumniProfile[];
   gallery: GalleryPhoto[];
   homeHeroSlides: string[];
   videos: YouTubeVideo[];
@@ -120,6 +122,7 @@ export async function resetSchoolData(): Promise<{ removedUsers: number; removed
           weekdayHours: '', fridayHours: '', footerHours: '', instagramUrl: '', facebookUrl: '', youtubeUrl: ''
         },
         announcements: [],
+        alumni: [],
         gallery: [],
         homeHeroSlides: [],
         videos: [],
@@ -207,6 +210,7 @@ export function ensureDefaults(data: Partial<DatabaseSchema>): DatabaseSchema {
     messages: Array.isArray(data.messages) ? data.messages : [],
     contactInfo: { ...DEFAULT_CONTACT_INFO, ...(data.contactInfo || {}) },
     announcements: Array.isArray(data.announcements) ? data.announcements : [],
+    alumni: Array.isArray(data.alumni) ? data.alumni : [],
     gallery: Array.isArray(data.gallery) ? data.gallery : [],
     homeHeroSlides: Array.isArray(data.homeHeroSlides) ? data.homeHeroSlides : [],
     videos: Array.isArray(data.videos) ? data.videos : [],

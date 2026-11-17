@@ -21,7 +21,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenPortal }) => {
           {/* Column 1: School Identity */}
           <div className="space-y-4 min-[360px]:col-span-2 sm:col-span-2 lg:col-span-4">
             <div className="flex items-center gap-3">
-              <img src={IMAGES.logoSekolah} alt="Logo SMA Negeri 1 Halmahera Tengah" className="school-logo-3d h-10 w-10 shrink-0 object-contain" />
+              <img src={IMAGES.logoSekolah} alt="Logo SMA Negeri 1 Halmahera Tengah" className="school-logo-3d h-12 w-12 shrink-0 object-contain" />
               <div>
                 <span className="font-serif-title text-base sm:text-lg font-bold tracking-tight text-white block">
                   SMA NEGERI 1 HALMAHERA TENGAH

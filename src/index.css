@@ -78,16 +78,12 @@
   }
 
   .school-logo-3d {
-    filter: saturate(1.04) contrast(1.06) drop-shadow(0 1px 1px rgb(15 23 42 / 28%)) drop-shadow(0 4px 4px rgb(15 23 42 / 16%));
+    filter: saturate(1.12) contrast(1.14)
+      drop-shadow(0 1px 0 rgb(15 23 42 / 45%))
+      drop-shadow(0 3px 3px rgb(15 23 42 / 24%));
     image-rendering: auto;
-    backface-visibility: hidden;
-    transition: transform 200ms ease, filter 200ms ease;
   }
 
-  .school-logo-3d:hover {
-    transform: translateY(-1px) scale(1.03);
-    filter: saturate(1.06) contrast(1.08) drop-shadow(0 2px 2px rgb(15 23 42 / 28%)) drop-shadow(0 6px 6px rgb(15 23 42 / 18%));
-  }
 }
 
 .home-hero-title-line {
@@ -387,10 +383,6 @@
   *::after {
     transition: none;
     scroll-behavior: auto;
-  }
-
-  .school-logo-3d:hover {
-    transform: none;
   }
 }
 
