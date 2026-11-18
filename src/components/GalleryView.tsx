@@ -19,11 +19,12 @@ import {
 interface GalleryViewProps {
   onNavigate: (tab: string) => void;
   currentUser?: UserAccount | null;
+  initialPhotoId?: string | null;
 }
 
 const PHOTO_CATEGORIES = ['Semua', 'Akademik', 'Prestasi', 'Ekstrakurikuler', 'Olahraga', 'Sosialisasi', 'Upacara'];
 
-export const GalleryView: React.FC<GalleryViewProps> = ({ onNavigate, currentUser }) => {
+export const GalleryView: React.FC<GalleryViewProps> = ({ onNavigate, currentUser, initialPhotoId }) => {
   const [viewMode, setViewMode] = useState<'foto' | 'video'>('foto');
 
   // Photo state
@@ -62,6 +63,15 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ onNavigate, currentUse
       window.removeEventListener('videos-updated', handleUpdate);
     };
   }, []);
+
+  useEffect(() => {
+    if (!initialPhotoId) return;
+    const photo = photoItems.find(item => item.id === initialPhotoId);
+    if (!photo) return;
+    setSelectedPhotoCategory(photo.category);
+    setActivePhoto(photo);
+    setActivePhotoIndex(0);
+  }, [initialPhotoId, photoItems]);
 
   // Filtered photos
   const filteredPhotos = selectedPhotoCategory === 'Semua'
@@ -194,15 +204,17 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ onNavigate, currentUse
                     setActivePhoto(item);
                     setActivePhotoIndex(0);
                   }}
-                  className="group cursor-pointer bg-white rounded-2xl border border-blue-100 overflow-hidden hover:border-blue-900/50 hover:shadow-xl hover:shadow-blue-950/10 transition-all flex flex-col justify-between"
+                  className="group cursor-pointer rounded-2xl bg-gradient-to-br from-amber-300 via-amber-500 to-amber-800 p-[3px] shadow-[0_16px_40px_-18px_rgba(251,191,36,0.45)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_22px_48px_-16px_rgba(251,191,36,0.6)]"
                 >
-                  <div className="relative aspect-[16/10] overflow-hidden bg-slate-900">
-                    <div className="absolute inset-x-0 top-0 z-10 h-1 bg-gradient-to-r from-blue-950 via-blue-700 to-amber-400" />
+                  <div className="flex h-full flex-col justify-between overflow-hidden rounded-[13px] bg-white">
+                  <div className="relative aspect-[16/10] overflow-hidden bg-slate-900 ring-1 ring-white/20">
                     <img
                       src={item.image}
                       alt={item.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      loading="lazy"
+                      className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-110"
                     />
+                    <div className="pointer-events-none absolute inset-3 rounded-lg border border-white/30" />
                     {count > 1 && (
                       <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-md bg-blue-950/85 border border-amber-300/50 text-white text-[11px] font-mono backdrop-blur-sm">
                         +{count - 1} foto
@@ -214,7 +226,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ onNavigate, currentUse
                       </span>
                     </div>
                   </div>
-                  <div className="p-5 space-y-2">
+                  <div className="space-y-2 p-5">
                     <div className="flex items-center justify-between text-xs text-slate-500">
                       <span className="font-bold text-blue-900 bg-blue-50 px-2 py-0.5 rounded">{item.category}</span>
                       <div className="flex items-center gap-1 font-mono">
@@ -228,6 +240,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ onNavigate, currentUse
                     <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
                       {item.description}
                     </p>
+                  </div>
                   </div>
                 </div>
               );
@@ -247,14 +260,15 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ onNavigate, currentUse
               <div
                 key={video.id}
                 onClick={() => setActiveVideo(video)}
-                className="group cursor-pointer bg-white rounded-2xl border border-blue-100 overflow-hidden hover:border-blue-900/50 hover:shadow-xl hover:shadow-blue-950/10 transition-all flex flex-col justify-between"
+                className="group cursor-pointer rounded-2xl bg-gradient-to-br from-amber-300 via-amber-500 to-amber-800 p-[3px] shadow-[0_16px_40px_-18px_rgba(251,191,36,0.45)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_22px_48px_-16px_rgba(251,191,36,0.6)]"
               >
-                <div className="relative aspect-[16/9] overflow-hidden bg-slate-950">
-                  <div className="absolute inset-x-0 top-0 z-10 h-1 bg-gradient-to-r from-blue-950 via-blue-700 to-amber-400" />
+                <div className="flex h-full flex-col justify-between overflow-hidden rounded-[13px] bg-white">
+                <div className="relative aspect-[16/9] overflow-hidden rounded-t-[13px] bg-slate-950 ring-1 ring-white/20">
                   <img
                     src={video.thumbnailUrl}
                     alt={video.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    loading="lazy"
+                    className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-110"
                   />
                   <div className="absolute inset-0 bg-black/30 group-hover:bg-black/50 transition-colors flex items-center justify-center">
                     <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-950 to-blue-700 ring-2 ring-amber-400 ring-offset-2 ring-offset-blue-950/40 text-white flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
@@ -264,6 +278,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ onNavigate, currentUse
                   <span className="absolute bottom-2.5 right-2.5 px-2 py-0.5 bg-blue-950/90 border border-amber-300/50 text-white text-[10px] font-mono rounded-md">
                     YouTube
                   </span>
+                  <div className="pointer-events-none absolute inset-3 rounded-lg border border-white/30" />
                 </div>
                 <div className="p-5 space-y-2">
                   <div className="flex items-center justify-between text-xs text-slate-500">
@@ -277,6 +292,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ onNavigate, currentUse
                       {video.description}
                     </p>
                   )}
+                </div>
                 </div>
               </div>
             ))}

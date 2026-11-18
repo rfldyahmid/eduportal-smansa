@@ -13,9 +13,10 @@ const formatStatCount = (value: number | undefined) =>
 
 interface HomeViewProps {
   onNavigate: (tab: string) => void;
+  onOpenGalleryPhoto: (photoId: string) => void;
 }
 
-export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
+export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenGalleryPhoto }) => {
   const academicYear = getCurrentAcademicYear();
   const [heroImages, setHeroImages] = useState<string[]>([IMAGES.heroSchool]);
   const [homeStats, setHomeStats] = useState<HomeStats | null>(null);
@@ -419,6 +420,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
                     src={teacher.photoUrl || IMAGES.defaultAvatarNeutral}
                     alt={`Foto ${teacher.fullName}`}
                     loading="lazy"
+                    decoding="async"
                     referrerPolicy="no-referrer"
                     className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                   />
@@ -488,21 +490,34 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
             <p className="py-8 text-center text-sm text-slate-300">Belum ada foto kehidupan sekolah di galeri.</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {galleryPreview.map(item => (
-                <div key={item.id} className="group relative rounded-xl overflow-hidden aspect-[16/9] bg-slate-800">
-                  <img
-                    src={item.image}
-                    alt={item.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    referrerPolicy="no-referrer"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/30 to-transparent flex items-end p-5">
-                    <div>
-                      <h4 className="text-sm font-semibold text-white">{item.title}</h4>
-                      <p className="text-xs text-slate-300 mt-0.5 line-clamp-2">{item.description || item.category}</p>
+              {galleryPreview.map((item, index) => (
+                <button
+                  type="button"
+                  key={item.id}
+                  onClick={() => onOpenGalleryPhoto(item.id)}
+                  aria-label={`Buka foto ${item.title} di galeri`}
+                  className="group w-full text-left relative rounded-2xl bg-gradient-to-br from-amber-300 via-amber-500 to-amber-800 p-[3px] shadow-[0_16px_40px_-18px_rgba(251,191,36,0.55)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_22px_48px_-16px_rgba(251,191,36,0.65)]"
+                >
+                  <div className="relative aspect-[16/9] overflow-hidden rounded-[13px] bg-slate-800 ring-1 ring-white/15">
+                    <img
+                      src={item.image}
+                      alt={item.title}
+                      loading="lazy"
+                      className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-110"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-950/20 to-transparent transition-colors duration-300 group-hover:from-slate-950/90" />
+                    <span className="absolute left-4 top-4 rounded-full border border-white/25 bg-slate-950/50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-200 backdrop-blur-md">
+                      {item.category || `Cerita Sekolah 0${index + 1}`}
+                    </span>
+                    <div className="absolute inset-x-0 bottom-0 p-5 sm:p-6">
+                      <div className="mb-2 h-px w-10 bg-amber-400 transition-all duration-300 group-hover:w-16" />
+                      <h4 className="text-base font-bold text-white sm:text-lg">{item.title}</h4>
+                      <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-200 sm:text-sm">{item.description || 'Momen kebersamaan dan semangat belajar di lingkungan sekolah.'}</p>
                     </div>
+                    <div className="pointer-events-none absolute inset-3 rounded-lg border border-white/20" />
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           )}

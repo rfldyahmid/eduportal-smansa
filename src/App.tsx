@@ -1,23 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { lazy, Suspense, useState, useEffect } from 'react';
 import { UserAccount } from './types';
 import { getActiveSession, setActiveSession } from './utils/storage';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { HomeView } from './components/HomeView';
-import { VisiMisiView } from './components/VisiMisiView';
-import { PrincipalSpeechView } from './components/PrincipalSpeechView';
-import { TeachersView } from './components/TeachersView';
-import { PPDBView } from './components/PPDBView';
-import { GalleryView } from './components/GalleryView';
-import { ContactView } from './components/ContactView';
 import { AuthModal } from './components/Portal/AuthModal';
-import { StudentPortal } from './components/Portal/StudentPortal';
-import { TeacherPortal } from './components/Portal/TeacherPortal';
-import { AdminPortal } from './components/Portal/AdminPortal';
 import { apiGetMe, hasAuthToken } from './utils/api';
-import { KombelView } from './components/KombelView';
+
+const VisiMisiView = lazy(() => import('./components/VisiMisiView').then(module => ({ default: module.VisiMisiView })));
+const PrincipalSpeechView = lazy(() => import('./components/PrincipalSpeechView').then(module => ({ default: module.PrincipalSpeechView })));
+const TeachersView = lazy(() => import('./components/TeachersView').then(module => ({ default: module.TeachersView })));
+const PPDBView = lazy(() => import('./components/PPDBView').then(module => ({ default: module.PPDBView })));
+const GalleryView = lazy(() => import('./components/GalleryView').then(module => ({ default: module.GalleryView })));
+const ContactView = lazy(() => import('./components/ContactView').then(module => ({ default: module.ContactView })));
+const StudentPortal = lazy(() => import('./components/Portal/StudentPortal').then(module => ({ default: module.StudentPortal })));
+const TeacherPortal = lazy(() => import('./components/Portal/TeacherPortal').then(module => ({ default: module.TeacherPortal })));
+const AdminPortal = lazy(() => import('./components/Portal/AdminPortal').then(module => ({ default: module.AdminPortal })));
+const KombelView = lazy(() => import('./components/KombelView').then(module => ({ default: module.KombelView })));
 export default function App() {
   const [currentTab, setCurrentTab] = useState<string>('beranda');
+  const [galleryPhotoToOpen, setGalleryPhotoToOpen] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [dbReady, setDbReady] = useState(false);
@@ -115,9 +117,18 @@ export default function App() {
 
       {/* Main Content Sections */}
       <main className="min-w-0 w-full flex-1">
+        <Suspense fallback={(
+          <div role="status" className="mx-auto flex min-h-48 max-w-7xl items-center justify-center px-4 text-sm text-slate-500">
+            Memuat halaman...
+          </div>
+        )}>
         {currentTab === 'beranda' && (
           <HomeView
             onNavigate={handleNavigate}
+            onOpenGalleryPhoto={photoId => {
+              setGalleryPhotoToOpen(photoId);
+              handleNavigate('galeri');
+            }}
           />
         )}
 
@@ -156,6 +167,7 @@ export default function App() {
           <GalleryView
             onNavigate={handleNavigate}
             currentUser={currentUser}
+            initialPhotoId={galleryPhotoToOpen}
           />
         )}
 
@@ -191,6 +203,7 @@ export default function App() {
             )}
           </div>
         )}
+        </Suspense>
       </main>
 
       {/* Institutional Footer */}

@@ -72,6 +72,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ currentUser, onLog
   // State for file upload
   const [fileInfo, setFileInfo] = useState<{ file: File; name: string; size: string } | null>(null);
   const submissionFileInputRef = useRef<HTMLInputElement>(null);
+  const isLoadingData = useRef(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -84,53 +85,66 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ currentUser, onLog
   };
 
   const loadData = async () => {
+    if (isLoadingData.current) return;
+    isLoadingData.current = true;
     try {
-      const profile = await fetchMyStudentProfile();
-      setStudentProfile(profile);
-      setProfileLoadError(null);
-    } catch (error) {
-      setProfileLoadError(error instanceof Error ? error.message : 'Profil siswa gagal dimuat dari server.');
-      return;
-    }
+      try {
+        const profile = await fetchMyStudentProfile();
+        setStudentProfile(profile);
+        setProfileLoadError(null);
+      } catch (error) {
+        setProfileLoadError(error instanceof Error ? error.message : 'Profil siswa gagal dimuat dari server.');
+        return;
+      }
 
-    let locallySeen: string[] = [];
-    try {
-      locallySeen = await fetchStudentNotificationReads();
-    } catch (error) {
-      console.error('Status baca notifikasi gagal dimuat dari server.', error);
-    }
-    setSeenNotificationKeys(locallySeen);
+      let locallySeen: string[] = [];
+      try {
+        locallySeen = await fetchStudentNotificationReads();
+      } catch (error) {
+        console.error('Status baca notifikasi gagal dimuat dari server.', error);
+      }
+      setSeenNotificationKeys(locallySeen);
 
-    try {
-      const [backendScheds, backendAsgs, backendSubs, backendAnnouncements] = await Promise.all([
-        fetchSchedules(),
-        fetchAssignments(),
-        fetchSubmissions(),
-        fetchPortalAnnouncements()
-      ]);
-      setSchedules(backendScheds);
-      setAssignments(backendAsgs);
-      setSubmissions(backendSubs);
-      setAnnouncements(backendAnnouncements);
-      setDataLoadError(null);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Data portal gagal dimuat dari server.';
-      setDataLoadError(message);
+      try {
+        const [backendScheds, backendAsgs, backendSubs, backendAnnouncements] = await Promise.all([
+          fetchSchedules(),
+          fetchAssignments(),
+          fetchSubmissions(),
+          fetchPortalAnnouncements()
+        ]);
+        setSchedules(backendScheds);
+        setAssignments(backendAsgs);
+        setSubmissions(backendSubs);
+        setAnnouncements(backendAnnouncements);
+        setDataLoadError(null);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Data portal gagal dimuat dari server.';
+        setDataLoadError(message);
+      }
+    } finally {
+      isLoadingData.current = false;
     }
   };
 
   useEffect(() => {
     loadData();
-    window.addEventListener('storage-schedules-updated', loadData);
-    window.addEventListener('storage-assignments-updated', loadData);
-    window.addEventListener('storage-portal-announcements-updated', loadData);
-    window.addEventListener('storage', loadData);
-    const refreshTimer = window.setInterval(loadData, 30000);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void loadData();
+    };
+    window.addEventListener('storage-schedules-updated', refreshWhenVisible);
+    window.addEventListener('storage-assignments-updated', refreshWhenVisible);
+    window.addEventListener('storage-portal-announcements-updated', refreshWhenVisible);
+    window.addEventListener('storage', refreshWhenVisible);
+    window.addEventListener('focus', refreshWhenVisible);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    const refreshTimer = window.setInterval(refreshWhenVisible, 30000);
     return () => {
-      window.removeEventListener('storage-schedules-updated', loadData);
-      window.removeEventListener('storage-assignments-updated', loadData);
-      window.removeEventListener('storage-portal-announcements-updated', loadData);
-      window.removeEventListener('storage', loadData);
+      window.removeEventListener('storage-schedules-updated', refreshWhenVisible);
+      window.removeEventListener('storage-assignments-updated', refreshWhenVisible);
+      window.removeEventListener('storage-portal-announcements-updated', refreshWhenVisible);
+      window.removeEventListener('storage', refreshWhenVisible);
+      window.removeEventListener('focus', refreshWhenVisible);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
       window.clearInterval(refreshTimer);
     };
   }, [currentUser.id]);

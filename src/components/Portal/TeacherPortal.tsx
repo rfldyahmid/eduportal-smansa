@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CalendarDays,
   ClipboardList,
@@ -121,8 +121,11 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
   const [editingAnnouncement, setEditingAnnouncement] = useState(false);
   const [announcementImageFile, setAnnouncementImageFile] = useState<File | null>(null);
   const [announcementDocumentFile, setAnnouncementDocumentFile] = useState<File | null>(null);
+  const isLoadingData = useRef(false);
 
   const loadData = async () => {
+    if (isLoadingData.current) return;
+    isLoadingData.current = true;
     try {
       const [backendTeachers, backendScheds, backendAsgs, backendSubs, backendAnnouncements] = await Promise.all([
         fetchTeachers(),
@@ -146,19 +149,28 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
       setAnnouncements(backendAnnouncements);
     } catch {
       setSubmissionLoadError('Data portal gagal dimuat dari server. Periksa koneksi dan coba muat ulang.');
+    } finally {
+      isLoadingData.current = false;
     }
   };
 
   useEffect(() => {
     loadData();
-    window.addEventListener('storage-schedules-updated', loadData);
-    window.addEventListener('storage-assignments-updated', loadData);
-    window.addEventListener('storage-portal-announcements-updated', loadData);
-    const refreshTimer = window.setInterval(loadData, 30000);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void loadData();
+    };
+    window.addEventListener('storage-schedules-updated', refreshWhenVisible);
+    window.addEventListener('storage-assignments-updated', refreshWhenVisible);
+    window.addEventListener('storage-portal-announcements-updated', refreshWhenVisible);
+    window.addEventListener('focus', refreshWhenVisible);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    const refreshTimer = window.setInterval(refreshWhenVisible, 30000);
     return () => {
-      window.removeEventListener('storage-schedules-updated', loadData);
-      window.removeEventListener('storage-assignments-updated', loadData);
-      window.removeEventListener('storage-portal-announcements-updated', loadData);
+      window.removeEventListener('storage-schedules-updated', refreshWhenVisible);
+      window.removeEventListener('storage-assignments-updated', refreshWhenVisible);
+      window.removeEventListener('storage-portal-announcements-updated', refreshWhenVisible);
+      window.removeEventListener('focus', refreshWhenVisible);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
       window.clearInterval(refreshTimer);
     };
   }, []);

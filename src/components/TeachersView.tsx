@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Teacher } from '../types';
 import { formatNip } from '../utils/formatNip';
 import { fetchTeachers } from '../utils/api';
-import { Search, Mail, Eye, X } from 'lucide-react';
+import { Search, Mail, X } from 'lucide-react';
 
 interface TeachersViewProps {
   onNavigate: (tab: string) => void;
@@ -26,14 +26,22 @@ const TeacherCard: React.FC<{
   >
     <div className="space-y-4">
       <div className="flex items-start gap-4">
-        <div className="w-20 h-24 rounded-lg overflow-hidden shrink-0 bg-slate-100 ring-1 ring-slate-200">
+        <button
+          type="button"
+          onClick={() => onPreview(teacher)}
+          disabled={!teacher.photoUrl}
+          aria-label={`Lihat foto ${teacher.fullName}`}
+          className="group/photo w-20 h-24 rounded-lg overflow-hidden shrink-0 bg-slate-100 ring-1 ring-slate-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-800 disabled:cursor-default"
+        >
           <img
             src={teacher.photoUrl}
             alt={teacher.fullName}
-            className="w-full h-full object-cover"
+            loading="lazy"
+            decoding="async"
+            className="h-full w-full object-cover transition-transform duration-300 group-hover/photo:scale-110"
             referrerPolicy="no-referrer"
           />
-        </div>
+        </button>
         <div className="space-y-1 min-w-0">
           <h3 className="font-bold text-slate-900 text-sm sm:text-base leading-snug truncate" title={teacher.fullName}>
             {teacher.fullName}
@@ -57,16 +65,6 @@ const TeacherCard: React.FC<{
         <Mail className="w-3.5 h-3.5" />
         <span className="truncate max-w-[170px]">{teacher.email.split('@')[0]}@...</span>
       </a>
-      <button
-        type="button"
-        onClick={() => onPreview(teacher)}
-        disabled={!teacher.photoUrl}
-        className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-blue-900 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
-        aria-label={`Pratinjau foto ${teacher.fullName}`}
-      >
-        <Eye className="h-3.5 w-3.5" />
-        Lihat Foto
-      </button>
     </div>
   </div>
 );

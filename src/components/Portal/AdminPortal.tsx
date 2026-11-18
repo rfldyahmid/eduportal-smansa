@@ -399,6 +399,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
   const [isLoadingPasswordResetNotifications, setIsLoadingPasswordResetNotifications] = useState(false);
   const [passwordResetNotificationError, setPasswordResetNotificationError] = useState('');
   const [passwordResetNotificationActionError, setPasswordResetNotificationActionError] = useState('');
+  const isRefreshingAdminNotifications = useRef(false);
   const [isProvisioningAccounts, setIsProvisioningAccounts] = useState(false);
   const [isResettingSchoolData, setIsResettingSchoolData] = useState(false);
   const [isUserFormOpen, setIsUserFormOpen] = useState(false);
@@ -559,6 +560,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
   };
 
   const refreshAdminPasswordResetNotifications = async (showLoading = false) => {
+    if (isRefreshingAdminNotifications.current) return;
+    isRefreshingAdminNotifications.current = true;
     if (showLoading) setIsLoadingPasswordResetNotifications(true);
     try {
       const result = await fetchAdminPasswordResetNotifications();
@@ -569,17 +572,25 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
         error instanceof Error ? error.message : 'Gagal memuat permintaan reset sandi.'
       );
     } finally {
+      isRefreshingAdminNotifications.current = false;
       if (showLoading) setIsLoadingPasswordResetNotifications(false);
     }
   };
 
   useEffect(() => {
     if (currentUser.role !== 'admin') return;
-    void refreshAdminPasswordResetNotifications();
-    const intervalId = window.setInterval(() => {
-      void refreshAdminPasswordResetNotifications();
-    }, 30_000);
-    return () => window.clearInterval(intervalId);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void refreshAdminPasswordResetNotifications();
+    };
+    refreshWhenVisible();
+    window.addEventListener('focus', refreshWhenVisible);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    const intervalId = window.setInterval(refreshWhenVisible, 30_000);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshWhenVisible);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
   }, [currentUser.role]);
 
   const loadTrash = async () => {

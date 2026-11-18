@@ -14,3 +14,9 @@ Thumbs.db
 data/db.json
 data/uploads/
 migration-report.json
+
+# Database backup
+sekolah.sql
+sekolah.dump
+*.sql
+*.dump

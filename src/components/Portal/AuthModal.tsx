@@ -74,13 +74,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
     try {
       const { user } = await apiLogin(username.trim().replace(/\s+/g, ''), password);
 
-      // Admin access includes the separate school leadership and KOMBEL accounts.
-      const isAdminAccess = selectedRole === 'admin' && (
-        user.role === 'admin' || user.role === 'kepala_sekolah' || user.role === 'ketua_kombel'
-      );
-      if (user.role !== selectedRole && !isAdminAccess) {
+      // Admins authenticate directly with their credentials. School leadership
+      // and KOMBEL accounts are part of the teacher/staff login choice.
+      const isAdminAccess = user.role === 'admin';
+      const isTeacherAccess = selectedRole === 'guru' && ['guru', 'kepala_sekolah', 'ketua_kombel'].includes(user.role);
+      if (user.role !== selectedRole && !isAdminAccess && !isTeacherAccess) {
         clearAuthToken();
-        setErrorMsg(`Akun ini terdaftar sebagai peran ${user.role.replace('_', ' ').toUpperCase()}, bukan ${selectedRole.replace('_', ' ').toUpperCase()}. Silakan sesuaikan jenis pengguna.`);
+        setErrorMsg(`Akun ini tidak terdaftar sebagai ${selectedRole === 'siswa' ? 'siswa' : 'guru/staf'}. Silakan pilih jenis pengguna yang sesuai.`);
         setIsSubmitting(false);
         return;
       }
@@ -299,7 +299,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                     >
                       <option value="siswa">Siswa</option>
                       <option value="guru">Guru</option>
-                      <option value="admin">Admin</option>
                     </select>
                     <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                   </div>
