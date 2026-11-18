@@ -15,7 +15,9 @@ import {
   MessageSquare,
   Sparkles,
   ExternalLink,
-  Download
+  Download,
+  Paperclip,
+  FileUp
 } from 'lucide-react';
 import { Teacher, UserAccount, ScheduleItem, Assignment, PortalAnnouncement, AssignmentSubmission } from '../../types';
 import {
@@ -39,6 +41,7 @@ import {
 } from '../../utils/api';
 import { getProfileAvatar } from '../../utils/profileAvatar';
 import { SCHOOL_CLASSES } from '../../utils/schoolClasses';
+import { TEACHER_SUBJECTS } from '../../utils/teacherSubjects';
 import { PortalAnnouncementAttachments } from './PortalAnnouncementAttachments';
 import { getActiveScheduleNotifications } from '../../utils/activeScheduleNotifications';
 
@@ -132,10 +135,21 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
 
   const [editingSchedule, setEditingSchedule] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState(false);
+  const [assignmentAttachmentFile, setAssignmentAttachmentFile] = useState<File | null>(null);
   const [editingAnnouncement, setEditingAnnouncement] = useState(false);
   const [announcementImageFile, setAnnouncementImageFile] = useState<File | null>(null);
   const [announcementDocumentFile, setAnnouncementDocumentFile] = useState<File | null>(null);
   const isLoadingData = useRef(false);
+
+  useEffect(() => {
+    if (editingAssignment) return;
+    setAssignmentForm(current => ({
+      ...current,
+      subject: teacher.subject || current.subject,
+      teacherId: teacher.id,
+      teacherName: teacher.fullName
+    }));
+  }, [editingAssignment, teacher.id, teacher.fullName, teacher.subject]);
 
   const loadData = async () => {
     if (isLoadingData.current) return;
@@ -256,6 +270,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
       maxScore: 100,
       createdAt: new Date().toISOString()
     });
+    setAssignmentAttachmentFile(null);
     setEditingAssignment(false);
   };
 
@@ -322,14 +337,14 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
           ...assignmentForm,
           teacherName: teacher.fullName,
           teacherId: teacher.id
-        });
+        }, assignmentAttachmentFile || undefined);
         setAssignments(prev => prev.map(a => a.id === updated.id ? updated : a));
       } else {
         const created = await createAssignment({
           ...assignmentForm,
           teacherName: teacher.fullName,
           teacherId: teacher.id
-        });
+        }, assignmentAttachmentFile || undefined);
         setAssignments(prev => [created, ...prev]);
       }
       resetAssignment();
@@ -418,6 +433,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
 
   const startEditAssignment = (item: Assignment) => {
     setAssignmentForm(item);
+    setAssignmentAttachmentFile(null);
     setEditingAssignment(true);
     setActiveTab('tugas');
   };
@@ -678,6 +694,24 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
                 </select>
               </div>
               <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-700" htmlFor="assignment-subject">Mata Pelajaran *</label>
+                <select
+                  id="assignment-subject"
+                  required
+                  className="w-full rounded-lg border border-slate-300 bg-white p-2 text-xs"
+                  value={assignmentForm.subject}
+                  onChange={e => setAssignmentForm({ ...assignmentForm, subject: e.target.value })}
+                >
+                  <option value="" disabled>Pilih mata pelajaran</option>
+                  {assignmentForm.subject && !TEACHER_SUBJECTS.some(item => item.subject === assignmentForm.subject) && (
+                    <option value={assignmentForm.subject}>{assignmentForm.subject}</option>
+                  )}
+                  {TEACHER_SUBJECTS.filter(item => item.subject !== 'Kepala Sekolah').map(item => (
+                    <option key={item.subject} value={item.subject}>{item.subject}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-700">Instruksi / Soal Tugas *</label>
                 <textarea
                   required
@@ -687,6 +721,29 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
                   value={assignmentForm.description}
                   onChange={e => setAssignmentForm({ ...assignmentForm, description: e.target.value })}
                 />
+              </div>
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold text-slate-700" htmlFor="assignment-attachment">
+                  Lampiran instruksi <span className="font-normal text-slate-500">(opsional, gambar atau PDF/Word, maks. 10 MB)</span>
+                </label>
+                <input
+                  id="assignment-attachment"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.jpg,.jpeg,.png,.webp,.pdf,.doc,.docx"
+                  onChange={event => setAssignmentAttachmentFile(event.target.files?.[0] || null)}
+                  className="block w-full rounded-lg border border-slate-300 bg-white p-2 text-xs file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-blue-900"
+                />
+                {assignmentAttachmentFile ? (
+                  <div className="flex items-center justify-between gap-2 rounded-lg bg-blue-50 px-3 py-2 text-[11px] text-blue-950">
+                    <span className="flex min-w-0 items-center gap-2 truncate"><Paperclip size={14} /> {assignmentAttachmentFile.name}</span>
+                    <button type="button" onClick={() => setAssignmentAttachmentFile(null)} className="shrink-0 font-semibold hover:underline">Hapus pilihan</button>
+                  </div>
+                ) : assignmentForm.attachmentUrl ? (
+                  <a href={assignmentForm.attachmentUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[11px] font-medium text-blue-900 hover:underline">
+                    <Paperclip size={13} /> Lampiran saat ini: {assignmentForm.attachmentName || 'Lihat lampiran'}
+                  </a>
+                ) : null}
+                <p className="text-[10px] text-slate-500">Lampiran akan tampil pada instruksi tugas siswa dan dapat dipratinjau sebelum diunduh.</p>
               </div>
               <div className="space-y-2">
                 <label className="block text-[11px] font-semibold text-slate-600">Batas Waktu Pengumpulan</label>

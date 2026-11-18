@@ -19,6 +19,7 @@ import { Student, UserAccount, ScheduleItem, Assignment, PortalAnnouncement, Ass
 import { fetchMyStudentProfile, fetchStudentNotificationReads, markStudentNotificationsRead, fetchScheduleNotificationReads, markScheduleNotificationsRead, fetchAssignments, fetchPortalAnnouncements, fetchSubmissions, submitAssignment, fetchSchedules } from '../../utils/api';
 import { PrintScheduleModal } from '../PrintScheduleModal';
 import { PortalAnnouncementAttachments } from './PortalAnnouncementAttachments';
+import { AssignmentInstructionAttachment } from './AssignmentInstructionAttachment';
 import { getProfileAvatar } from '../../utils/profileAvatar';
 import { getActiveScheduleNotifications } from '../../utils/activeScheduleNotifications';
 
@@ -277,6 +278,12 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ currentUser, onLog
 
   const handleSubmitTask = async (e: React.FormEvent, assignmentId: string) => {
     e.preventDefault();
+    const assignment = myAssignments.find(item => item.id === assignmentId);
+    if (assignment && new Date(assignment.deadline).getTime() <= Date.now()) {
+      setSubmittingAssignmentId(null);
+      alert('Batas waktu pengumpulan tugas telah berakhir.');
+      return;
+    }
     // If a file is selected, we will upload it; otherwise require at least some text/link
     if (!fileInfo && !submissionText.trim()) {
       alert('Harap pilih file atau masukkan teks/tautan.');
@@ -517,6 +524,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ currentUser, onLog
             myAssignments.map(item => {
               const mySub = submissions.find(s => s.assignmentId === item.id);
               const isFormOpen = submittingAssignmentId === item.id;
+              const isDeadlinePassed = Number.isFinite(new Date(item.deadline).getTime()) && new Date(item.deadline).getTime() <= clockNow.getTime();
               const hasFeedback = submissionFeedbackMsg?.id === item.id;
 
               return (
@@ -534,6 +542,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ currentUser, onLog
                       <div className="text-xs font-semibold text-amber-700 flex items-center gap-1">
                         <Clock3 size={14} /> Deadline: {formatDeadline(item.deadline)}
                       </div>
+                      {isDeadlinePassed && <span className="text-[11px] font-semibold text-rose-700">Masa pengumpulan telah berakhir</span>}
                       {mySub ? (
                         <div className="flex items-center gap-1.5">
                           <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${mySub.status === 'Dinilai'
@@ -561,6 +570,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ currentUser, onLog
                   <p className="text-xs sm:text-sm text-slate-700 whitespace-pre-line leading-relaxed">
                     {item.description}
                   </p>
+                  <AssignmentInstructionAttachment assignment={item} />
 
                   {/* Previous submission view */}
                   {mySub && (
@@ -570,7 +580,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ currentUser, onLog
                           <FileCheck className="w-4 h-4 text-emerald-600" />
                           Jawaban yang Anda kirimkan ({mySub.submittedAt}):
                         </span>
-                        {!isFormOpen && (
+                        {!isFormOpen && !isDeadlinePassed && (
                           <button
                             onClick={() => handleOpenSubmitForm(item.id)}
                             className="text-blue-900 hover:underline font-semibold cursor-pointer"
@@ -601,7 +611,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ currentUser, onLog
                   )}
 
                   {/* Submission Form Toggle */}
-                  {!mySub && !isFormOpen && (
+                  {!mySub && !isFormOpen && !isDeadlinePassed && (
                     <button
                       onClick={() => handleOpenSubmitForm(item.id)}
                       className="px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
@@ -645,11 +655,12 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ currentUser, onLog
                           className="w-full p-2.5 text-xs bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-900 focus:outline-none"
                         />
                       </div>
+                      {isDeadlinePassed && <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-800">Batas waktu telah berakhir. Jawaban tidak dapat dikirim lagi.</p>}
                       <div className="flex items-center gap-2">
                         <button
                           type="submit"
-                          disabled={isSendingSubmission}
-                          className="px-4 py-2 bg-blue-900 hover:bg-blue-800 disabled:opacity-50 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 cursor-pointer"
+                          disabled={isSendingSubmission || isDeadlinePassed}
+                          className="px-4 py-2 bg-blue-900 hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 cursor-pointer"
                         >
                           <Send className="w-3.5 h-3.5" />
                           <span>{isSendingSubmission ? 'Mengirimkan...' : 'Kirim ke Guru'}</span>

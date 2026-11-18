@@ -633,17 +633,23 @@ export async function fetchAssignments(filter?: { classId?: string; teacherId?: 
   return apiRequest<Assignment[]>(`/assignments${q}`);
 }
 
-export async function createAssignment(payload: Omit<Assignment, 'id' | 'createdAt'>): Promise<Assignment> {
+export async function createAssignment(payload: Omit<Assignment, 'id' | 'createdAt'>, attachment?: File): Promise<Assignment> {
+  const body = new FormData();
+  body.append('assignment', JSON.stringify(payload));
+  if (attachment) body.append('attachment', attachment);
   return apiRequest<Assignment>('/assignments', {
     method: 'POST',
-    body: JSON.stringify(payload)
+    body
   });
 }
 
-export async function updateAssignment(item: Assignment): Promise<Assignment> {
+export async function updateAssignment(item: Assignment, attachment?: File): Promise<Assignment> {
+  const body = new FormData();
+  body.append('assignment', JSON.stringify(item));
+  if (attachment) body.append('attachment', attachment);
   return apiRequest<Assignment>(`/assignments/${encodeURIComponent(item.id)}`, {
     method: 'PUT',
-    body: JSON.stringify(item)
+    body
   });
 }
 

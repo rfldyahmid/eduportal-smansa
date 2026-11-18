@@ -180,6 +180,9 @@ export interface Assignment {
   deadline: string; // e.g. "05 Oktober 2026, 23:59 WIT"
   maxScore: number;
   attachmentName?: string;
+  attachmentUrl?: string;
+  attachmentMimeType?: string;
+  attachmentSize?: number;
   createdAt: string;
 }
 

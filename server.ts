@@ -176,6 +176,33 @@ const announcementUpload = multer({
     }
   }
 });
+const assignmentAttachmentTypes: Record<string, string[]> = {
+  '.jpg': ['image/jpeg'],
+  '.jpeg': ['image/jpeg'],
+  '.png': ['image/png'],
+  '.webp': ['image/webp'],
+  '.pdf': ['application/pdf'],
+  '.doc': ['application/msword'],
+  '.docx': ['application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+};
+const assignmentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const extension = path.extname(file.originalname).toLowerCase();
+    if (assignmentAttachmentTypes[extension]?.includes(file.mimetype)) cb(null, true);
+    else cb(new Error('Lampiran tugas harus berupa gambar JPG, PNG, WEBP atau dokumen PDF/Word.'));
+  }
+});
+const handleAssignmentUpload: import('express').RequestHandler = (req, res, next) => {
+  assignmentUpload.single('attachment')(req, res, error => {
+    if (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Lampiran tugas tidak dapat diunggah.' });
+      return;
+    }
+    next();
+  });
+};
 const handlePortalAnnouncementUploads: import('express').RequestHandler = (req, res, next) => {
   announcementUpload.fields([{ name: 'image', maxCount: 1 }, { name: 'file', maxCount: 1 }])(req, res, error => {
     if (error) {
@@ -282,6 +309,17 @@ async function safeDeleteImage(imagePath?: string) {
   } catch {
     // Ignore unlink error
   }
+}
+
+function getAssignmentDeadlineTime(deadline: unknown): number {
+  if (typeof deadline !== 'string' || !deadline.trim()) return Number.NaN;
+  const localInput = deadline.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (localInput) {
+    const [, year, month, day, hour, minute, second = '0'] = localInput;
+    // datetime-local deadlines are entered in the school's WIT timezone (UTC+9).
+    return Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour) - 9, Number(minute), Number(second));
+  }
+  return new Date(deadline).getTime();
 }
 
 function extractYouTubeVideoId(url: string): string | null {
@@ -2772,11 +2810,19 @@ app.get('/api/assignments', requireAuth, async (req: AuthenticatedRequest, res) 
   res.json(results);
 });
 
-app.post('/api/assignments', requireAdminOrTeacher, async (req, res) => {
-  const body = req.body || {};
+app.post('/api/assignments', requireAdminOrTeacher, handleAssignmentUpload, async (req: AuthenticatedRequest, res) => {
+  let body: Record<string, any> = {};
+  try {
+    body = JSON.parse(String(req.body?.assignment || '{}'));
+  } catch {
+    return res.status(400).json({ message: 'Data tugas tidak valid.' });
+  }
   if (!body.title || !body.subject || !body.classId) {
     return res.status(400).json({ message: 'Judul, mata pelajaran, dan kelas wajib diisi.' });
   }
+
+  const attachment = req.file;
+  const attachmentUrl = attachment ? await persistUploadedFile(attachment, 'assignment-attachment') : undefined;
 
   const item: Assignment = {
     id: `asg-${Date.now()}`,
@@ -2789,7 +2835,10 @@ app.post('/api/assignments', requireAdminOrTeacher, async (req, res) => {
     description: String(body.description || '').trim(),
     deadline: body.deadline || new Date(Date.now() + 7 * 86400000).toISOString(),
     maxScore: Number(body.maxScore) || 100,
-    attachmentName: body.attachmentName,
+    attachmentName: attachment ? path.basename(attachment.originalname) : undefined,
+    attachmentUrl,
+    attachmentMimeType: attachment?.mimetype,
+    attachmentSize: attachment?.size,
     createdAt: new Date().toISOString()
   };
 
@@ -2799,21 +2848,41 @@ app.post('/api/assignments', requireAdminOrTeacher, async (req, res) => {
   res.status(201).json(item);
 });
 
-app.put('/api/assignments/:id', requireAdminOrTeacher, async (req, res) => {
+app.put('/api/assignments/:id', requireAdminOrTeacher, handleAssignmentUpload, async (req: AuthenticatedRequest, res) => {
   const db = await getDb();
   const index = db.assignments.findIndex(a => a.id === req.params.id);
   if (index < 0) return res.status(404).json({ message: 'Tugas tidak ditemukan.' });
 
-  db.assignments[index] = { ...db.assignments[index], ...req.body, id: db.assignments[index].id };
+  let body: Partial<Assignment> = {};
+  try {
+    body = JSON.parse(String(req.body?.assignment || '{}')) as Partial<Assignment>;
+  } catch {
+    return res.status(400).json({ message: 'Data tugas tidak valid.' });
+  }
+  const existing = db.assignments[index];
+  const attachment = req.file;
+  const attachmentUrl = attachment ? await persistUploadedFile(attachment, 'assignment-attachment') : existing.attachmentUrl;
+  db.assignments[index] = {
+    ...existing,
+    ...body,
+    id: existing.id,
+    attachmentUrl,
+    attachmentName: attachment ? path.basename(attachment.originalname) : existing.attachmentName,
+    attachmentMimeType: attachment?.mimetype || existing.attachmentMimeType,
+    attachmentSize: attachment?.size || existing.attachmentSize
+  };
   await saveDb();
+  if (attachment && existing.attachmentUrl) await safeDeleteImage(existing.attachmentUrl);
   res.json(db.assignments[index]);
 });
 
 app.delete('/api/assignments/:id', requireAdminOrTeacher, async (req, res) => {
   const db = await getDb();
+  const existing = db.assignments.find(a => a.id === req.params.id);
   db.assignments = db.assignments.filter(a => a.id !== req.params.id);
   db.submissions = db.submissions.filter(s => s.assignmentId !== req.params.id);
   await saveDb();
+  if (existing?.attachmentUrl) await safeDeleteImage(existing.attachmentUrl);
   res.status(204).end();
 });
 
@@ -2862,10 +2931,19 @@ app.get('/api/submissions', requireAuth, async (req: AuthenticatedRequest, res) 
 
 app.post('/api/submissions', requireAuth, upload.single('file'), async (req: AuthenticatedRequest & { file?: Express.Multer.File }, res) => {
   const body = req.body || {};
-  // Allow submissions with a file upload (linkOrContent may be empty in that case)
   if (!body.assignmentId) {
     return res.status(400).json({ message: 'Assignment ID wajib diisi.' });
   }
+
+  const db = await getDb();
+  const assignment = db.assignments.find(a => a.id === body.assignmentId);
+  if (!assignment) return res.status(404).json({ message: 'Tugas tidak ditemukan.' });
+  const deadlineTime = getAssignmentDeadlineTime(assignment.deadline);
+  if (Number.isFinite(deadlineTime) && Date.now() > deadlineTime) {
+    return res.status(403).json({ message: 'Batas waktu pengumpulan tugas telah berakhir.' });
+  }
+
+  // Allow submissions with a file upload (linkOrContent may be empty in that case)
   // If a file was uploaded, set appropriate fields
   if (req.file) {
     body.submissionType = 'file';
@@ -2877,11 +2955,6 @@ app.post('/api/submissions', requireAuth, upload.single('file'), async (req: Aut
     return res.status(400).json({ message: 'Jawaban atau tautan tugas wajib diisi.' });
   }
 
-  const db = await getDb();
-  const assignment = db.assignments.find(a => a.id === body.assignmentId);
-  if (!assignment) return res.status(404).json({ message: 'Tugas tidak ditemukan.' });
-
-  const isLate = new Date() > new Date(assignment.deadline);
   const existingIndex = db.submissions.findIndex(
     s => s.assignmentId === body.assignmentId && (s.studentId === req.user?.linkedId || s.studentNisn === req.user?.username)
   );
@@ -2898,7 +2971,7 @@ app.post('/api/submissions', requireAuth, upload.single('file'), async (req: Aut
     fileName: body.fileName,
     fileSize: body.fileSize,
     linkOrContent: String(body.linkOrContent).trim(),
-    status: isLate ? 'Terlambat' : 'Terkumpul'
+    status: 'Terkumpul'
   };
 
   if (existingIndex >= 0) {
