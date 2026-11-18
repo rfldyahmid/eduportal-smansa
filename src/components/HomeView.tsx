@@ -28,7 +28,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenGalleryPho
   const [galleryLoading, setGalleryLoading] = useState(true);
   const [galleryError, setGalleryError] = useState(false);
   const [activeHeroIndex, setActiveHeroIndex] = useState(0);
-  const touchStartX = useRef<number | null>(null);
+  const heroPointerStartX = useRef<number | null>(null);
   const teacherCarouselRef = useRef<HTMLDivElement>(null);
 
   const scrollTeachers = (direction: -1 | 1) => {
@@ -128,17 +128,31 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenGalleryPho
   return (
     <div className="space-y-12 pb-16 sm:space-y-16 sm:pb-20 lg:space-y-24">
       {/* 1. HERO SECTION */}
-      <section className="relative flex min-h-[430px] items-center overflow-hidden bg-slate-900 text-white min-[420px]:min-h-[460px] sm:min-h-[560px] lg:min-h-[640px]">
+      <section
+        className="relative flex min-h-[430px] items-center overflow-hidden bg-slate-900 text-white min-[420px]:min-h-[460px] sm:min-h-[560px] lg:min-h-[640px] touch-pan-y"
+        role="region"
+        aria-label="Foto utama beranda"
+        onPointerDown={event => {
+          if (event.pointerType === 'mouse' && event.button !== 0) return;
+          heroPointerStartX.current = event.clientX;
+        }}
+        onPointerUp={event => {
+          if (heroPointerStartX.current === null || heroImages.length < 2) return;
+          const distance = event.clientX - heroPointerStartX.current;
+          if (Math.abs(distance) > 45) moveHero(distance > 0 ? -1 : 1);
+          heroPointerStartX.current = null;
+        }}
+        onPointerCancel={() => { heroPointerStartX.current = null; }}
+        onKeyDown={event => {
+          if (event.target !== event.currentTarget) return;
+          if (event.key === 'ArrowLeft') moveHero(-1);
+          if (event.key === 'ArrowRight') moveHero(1);
+        }}
+        tabIndex={0}
+      >
         {/* Background Image with Measured Contrast Scrim */}
         <div
           className="absolute inset-0 overflow-hidden"
-          onTouchStart={event => { touchStartX.current = event.touches[0]?.clientX ?? null; }}
-          onTouchEnd={event => {
-            if (touchStartX.current === null || heroImages.length < 2) return;
-            const distance = event.changedTouches[0].clientX - touchStartX.current;
-            if (Math.abs(distance) > 45) moveHero(distance > 0 ? -1 : 1);
-            touchStartX.current = null;
-          }}
         >
           <div className="flex h-full w-full transition-transform duration-700 ease-in-out motion-reduce:transition-none" style={{ transform: `translateX(-${activeHeroIndex * 100}%)` }}>
             {heroImages.map((image, index) => (
@@ -155,11 +169,11 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenGalleryPho
           <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/70 to-slate-900/40" />
           <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent" />
           {heroImages.length > 1 && (
-            <div className="absolute bottom-5 right-4 flex items-center gap-2 sm:right-6">
-              <button type="button" onClick={() => moveHero(-1)} aria-label="Foto beranda sebelumnya" className="rounded-full border border-white/30 bg-slate-950/35 p-2.5 text-white backdrop-blur-sm transition hover:bg-slate-950/65">
+            <div className="absolute bottom-4 right-3 z-10 flex max-w-[calc(100%-1.5rem)] items-center gap-1.5 rounded-full border border-white/15 bg-slate-950/45 p-1.5 backdrop-blur-md sm:bottom-6 sm:right-6 sm:gap-2 sm:p-2">
+              <button type="button" onClick={() => moveHero(-1)} aria-label="Foto beranda sebelumnya" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/30 bg-slate-950/35 text-white backdrop-blur-sm transition hover:bg-slate-950/65 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300">
                 <ChevronLeft className="h-5 w-5" />
               </button>
-              <button type="button" onClick={() => moveHero(1)} aria-label="Foto beranda berikutnya" className="rounded-full border border-white/30 bg-slate-950/35 p-2.5 text-white backdrop-blur-sm transition hover:bg-slate-950/65">
+              <button type="button" onClick={() => moveHero(1)} aria-label="Foto beranda berikutnya" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/30 bg-slate-950/35 text-white backdrop-blur-sm transition hover:bg-slate-950/65 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300">
                 <ChevronRight className="h-5 w-5" />
               </button>
               <div className="ml-1 flex items-center gap-2">
@@ -178,13 +192,13 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenGalleryPho
             </div>
 
             <h1 className="font-serif-title font-bold leading-tight" style={{ textWrap: 'balance' }}>
-              <span className="home-hero-title-line block font-sans text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-wide text-amber-400">
+              <span className="home-hero-title-line block font-sans text-2xl min-[420px]:text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-wide text-amber-400">
                 Selamat Datang di
               </span>
-              <span className="home-hero-title-line block font-sans text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-wide text-amber-400">
+              <span className="home-hero-title-line block font-sans text-2xl min-[420px]:text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-wide text-amber-400">
                 Website SMA Negeri 1
               </span>
-              <span className="home-hero-title-line block font-sans text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-wide text-amber-400">
+              <span className="home-hero-title-line block font-sans text-2xl min-[420px]:text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-wide text-amber-400">
                 Halmahera Tengah
               </span>
             </h1>
