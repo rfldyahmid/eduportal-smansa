@@ -501,6 +501,17 @@ export async function markStudentNotificationsRead(keys: string[]): Promise<void
   });
 }
 
+export async function fetchScheduleNotificationReads(): Promise<string[]> {
+  return apiRequest<string[]>('/schedule-notification-reads');
+}
+
+export async function markScheduleNotificationsRead(keys: string[]): Promise<void> {
+  await apiRequest<void>('/schedule-notification-reads', {
+    method: 'POST',
+    body: JSON.stringify({ keys })
+  });
+}
+
 export async function createStudent(payload: Omit<Student, 'id'>): Promise<{ item: Student; username: string; temporaryPassword: string }> {
   return apiRequest<{ item: Student; username: string; temporaryPassword: string }>('/students', {
     method: 'POST',

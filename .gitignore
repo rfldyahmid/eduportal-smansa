@@ -20,3 +20,4 @@ sekolah.sql
 sekolah.dump
 *.sql
 *.dump
+!server/migrations/*.sql

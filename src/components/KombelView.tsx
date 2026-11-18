@@ -19,7 +19,7 @@ import {
   ChevronLeft,
   UserCheck
 } from 'lucide-react';
-import type { UserAccount, KombelActivity, KombelAgenda, KombelInfo, Teacher } from '../types';
+import type { UserAccount, KombelActivity, KombelAgenda, KombelInfo } from '../types';
 import { DEFAULT_KOMBEL_INFO } from '../utils/kombelInfoDefaults';
 import {
   fetchKombelInfo,
@@ -32,9 +32,7 @@ import {
   createKombelAgenda,
   updateKombelAgenda,
   removeKombelAgenda,
-  fileToDataUrl,
-  fetchTeachers,
-  updateTeacher
+  fileToDataUrl
 } from '../utils/api';
 
 interface KombelViewProps {
@@ -46,9 +44,6 @@ export const KombelView: React.FC<KombelViewProps> = ({ onNavigate, currentUser 
   const [activities, setActivities] = useState<KombelActivity[]>([]);
   const [agendas, setAgendas] = useState<KombelAgenda[]>([]);
   const [kombelInfo, setKombelInfo] = useState<KombelInfo>(DEFAULT_KOMBEL_INFO);
-  const [coordinator, setCoordinator] = useState<Teacher | null>(null);
-  const [isEditingCoordinator, setIsEditingCoordinator] = useState(false);
-  const [coordinatorForm, setCoordinatorForm] = useState({ fullName: '', degree: '', education: '', bio: '', photoUrl: '' });
   const [loading, setLoading] = useState(true);
 
   // Management Modal state
@@ -87,16 +82,14 @@ export const KombelView: React.FC<KombelViewProps> = ({ onNavigate, currentUser 
   const loadData = async () => {
     try {
       setLoading(true);
-      const [actData, agdData, infoData, teacherData] = await Promise.all([
+      const [actData, agdData, infoData] = await Promise.all([
         fetchKombelActivities(),
         fetchKombelAgendas(),
-        fetchKombelInfo(),
-        fetchTeachers()
+        fetchKombelInfo()
       ]);
       setActivities(actData);
       setAgendas(agdData);
       setKombelInfo(infoData);
-      setCoordinator(teacherData.find(teacher => teacher.id === 'tch-3') || null);
       setStatusMessage(null);
     } catch (err: any) {
       setStatusMessage({
@@ -132,53 +125,6 @@ export const KombelView: React.FC<KombelViewProps> = ({ onNavigate, currentUser 
       setInfoError(err?.message || 'Gagal menyimpan informasi KOMBEL.');
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const handleSaveCoordinator = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!coordinator) return;
-    setIsSubmitting(true);
-    setStatusMessage(null);
-    try {
-      const updatedCoordinator = await updateTeacher({ ...coordinator, ...coordinatorForm });
-      setCoordinator(updatedCoordinator);
-      setIsEditingCoordinator(false);
-      setStatusMessage({ type: 'success', text: 'Profil koordinator KOMBEL berhasil diperbarui.' });
-    } catch (err: any) {
-      setStatusMessage({ type: 'error', text: err?.message || 'Gagal memperbarui profil koordinator KOMBEL.' });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleOpenCoordinatorEditor = () => {
-    if (!coordinator) return;
-    setCoordinatorForm({
-      fullName: coordinator.fullName,
-      degree: coordinator.degree,
-      education: coordinator.education,
-      bio: coordinator.bio,
-      photoUrl: coordinator.photoUrl
-    });
-    setStatusMessage(null);
-    setIsEditingCoordinator(true);
-  };
-
-  const handleCoordinatorPhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      setStatusMessage({ type: 'error', text: 'Foto profil harus berformat JPG, PNG, atau WebP.' });
-      e.target.value = '';
-      return;
-    }
-    try {
-      const photoUrl = await fileToDataUrl(file);
-      setCoordinatorForm(current => ({ ...current, photoUrl }));
-      setStatusMessage(null);
-    } catch {
-      setStatusMessage({ type: 'error', text: 'Foto profil gagal dibaca. Silakan pilih ulang.' });
     }
   };
 
@@ -503,69 +449,6 @@ export const KombelView: React.FC<KombelViewProps> = ({ onNavigate, currentUser 
         </div>
         </div>
       </section>
-
-      {coordinator && (
-        <section className="space-y-3">
-          <div className="flex items-end justify-between gap-3">
-            <div>
-            <span className="text-xs font-semibold uppercase tracking-widest text-blue-900">Pengelola Komunitas</span>
-            <h2 className="font-serif-title text-lg font-bold text-slate-900 mt-1">Profil Koordinator KOMBEL</h2>
-            </div>
-            {isAuthorized && !isEditingCoordinator && (
-              <button
-                type="button"
-                onClick={handleOpenCoordinatorEditor}
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:border-blue-900 hover:text-blue-900"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-                Edit Profil
-              </button>
-            )}
-          </div>
-          {isEditingCoordinator ? (
-            <form onSubmit={handleSaveCoordinator} className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2">
-              <div className="flex items-center gap-3 sm:col-span-2">
-                <img src={coordinatorForm.photoUrl || '/FotoKepsek.jpg'} alt="Pratinjau foto koordinator" className="h-16 w-16 rounded-lg bg-slate-100 object-cover object-top" />
-                <label className="space-y-1 text-xs font-semibold text-slate-700">
-                  Foto Profil (JPG, PNG, WebP)
-                  <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleCoordinatorPhotoChange} className="block max-w-full text-xs font-normal text-slate-500 file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:font-semibold file:text-blue-900" />
-                </label>
-              </div>
-              <label className="space-y-1 text-xs font-semibold text-slate-700">Nama
-                <input required value={coordinatorForm.fullName} onChange={e => setCoordinatorForm({ ...coordinatorForm, fullName: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal" />
-              </label>
-              <label className="space-y-1 text-xs font-semibold text-slate-700">Gelar
-                <input value={coordinatorForm.degree} onChange={e => setCoordinatorForm({ ...coordinatorForm, degree: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal" />
-              </label>
-              <label className="space-y-1 text-xs font-semibold text-slate-700 sm:col-span-2">Pendidikan
-                <input value={coordinatorForm.education} onChange={e => setCoordinatorForm({ ...coordinatorForm, education: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal" />
-              </label>
-              <label className="space-y-1 text-xs font-semibold text-slate-700 sm:col-span-2">Profil Singkat
-                <textarea rows={3} value={coordinatorForm.bio} onChange={e => setCoordinatorForm({ ...coordinatorForm, bio: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal" />
-              </label>
-              <div className="flex justify-end gap-2 sm:col-span-2">
-                <button type="button" onClick={() => setIsEditingCoordinator(false)} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700">Batal</button>
-                <button type="submit" disabled={isSubmitting} className="rounded-lg bg-blue-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">{isSubmitting ? 'Menyimpan...' : 'Simpan Profil'}</button>
-              </div>
-            </form>
-          ) : (
-            <div className="flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:gap-5 sm:p-5">
-              <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-slate-100 sm:h-24 sm:w-24">
-                <img src={coordinator.photoUrl || '/FotoKepsek.jpg'} alt={coordinator.fullName} className="h-full w-full object-cover object-top" referrerPolicy="no-referrer" />
-              </div>
-              <div className="min-w-0 space-y-1.5">
-                <div>
-                  <span className="inline-flex rounded-full bg-blue-50 px-2.5 py-0.5 text-[10px] font-semibold text-blue-900">Koordinator KOMBEL</span>
-                  <h3 className="mt-1.5 text-base font-bold text-slate-900">{coordinator.fullName}</h3>
-                  <p className="text-xs text-slate-500">{coordinator.degree}</p>
-                </div>
-                <p className="text-xs leading-relaxed text-slate-600">{coordinator.bio}</p>
-                <p className="text-[11px] text-slate-500">Pendidikan: {coordinator.education}</p>
-              </div>
-            </div>
-          )}
-        </section>
-      )}
 
       {/* Featured Latest Activity & Next Agenda Grid */}
       <section className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -982,7 +865,7 @@ export const KombelView: React.FC<KombelViewProps> = ({ onNavigate, currentUser 
                 <label className="font-semibold text-slate-700">Koordinator / Moderator</label>
                 <input
                   type="text"
-                  placeholder="Contoh: Lukman Hi. Saleh, S.Pd (Ketua KOMBEL)"
+                  placeholder="Contoh: Felly Falentina Adam (Ketua KOMBEL)"
                   value={agendaForm.moderator}
                   onChange={e => setAgendaForm({ ...agendaForm, moderator: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-900 focus:outline-none"

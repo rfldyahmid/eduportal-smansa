@@ -124,18 +124,19 @@ import {
   Send,
   Contact,
   FileSpreadsheet,
-  Download
+  Download,
+  LogOut
 } from 'lucide-react';
 import { DEFAULT_CONTACT_INFO, CONTACT_INFO_UPDATED_EVENT } from '../../utils/contactInfo';
 import { normalizeSchoolClassId, SCHOOL_CLASSES } from '../../utils/schoolClasses';
 import { getProfileAvatar } from '../../utils/profileAvatar';
 import { setActiveSession } from '../../utils/storage';
 import { PortalAnnouncementAttachments } from './PortalAnnouncementAttachments';
+import { PortalSidebar, PortalNavItem } from './PortalSidebar';
 
 interface AdminPortalProps {
   currentUser: UserAccount;
   onLogout: () => void;
-  onNavigate?: (tab: string) => void;
 }
 
 type AdminTab =
@@ -210,7 +211,7 @@ const formatAnnouncementDate = (value: string) => {
   });
 };
 
-export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout, onNavigate }) => {
+export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout }) => {
   const [activeTab, setActiveTab] = useState<AdminTab>('siswa');
   const [isAdminProfileModalOpen, setIsAdminProfileModalOpen] = useState(false);
   const [isSavingAdminProfile, setIsSavingAdminProfile] = useState(false);
@@ -375,7 +376,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
     time: '09:00 - 11:30 WIT',
     location: 'Ruang Guru SMAN 1 Halmahera Tengah',
     description: '',
-    moderator: 'Lukman Hi. Saleh, S.Pd (Ketua KOMBEL)'
+    moderator: 'Felly Falentina Adam (Ketua KOMBEL)'
   });
 
   // ---------------- USERS & PASSWORD RESET STATE ----------------
@@ -1468,7 +1469,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
       time: '09:00 - 11:30 WIT',
       location: 'Ruang Guru SMAN 1 Halmahera Tengah',
       description: '',
-      moderator: 'Lukman Hi. Saleh, S.Pd (Ketua KOMBEL)'
+      moderator: 'Felly Falentina Adam (Ketua KOMBEL)'
     });
     setIsKombelAgendaModalOpen(true);
   };
@@ -2002,8 +2003,52 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
     setBulkStudentPasswordResetError('');
   };
 
+  const adminNavItems: PortalNavItem[] = [
+    { id: 'siswa', label: 'Data Siswa', icon: Users },
+    { id: 'guru', label: 'Data Guru dan Staf', icon: GraduationCap },
+    { id: 'ppdb', label: 'Verifikasi PPDB', icon: FileCheck },
+    { id: 'pengumuman', label: 'Pengumuman', icon: Bell },
+    { id: 'galeri-menu', label: 'Galeri', icon: Images, children: [
+      { id: 'galeri', label: 'Galeri Foto' },
+      { id: 'video', label: 'Video' }
+    ] },
+    { id: 'kombel', label: 'KOMBEL', icon: BookOpen },
+    { id: 'internal-menu', label: 'Info Internal', icon: MessageSquare, children: [
+      { id: 'internal:pengumuman', label: 'Pengumuman Internal' },
+      { id: 'internal:tugas', label: 'Tugas Internal' },
+      { id: 'internal:pengumpulan', label: 'Pengumpulan Tugas' }
+    ] },
+    { id: 'pesan', label: 'Aspirasi', icon: MessageSquare },
+    { id: 'kontak', label: 'Info Kontak', icon: Contact },
+    { id: 'pengguna-menu', label: 'Kelola Akun dan Sandi', icon: Key, children: [
+      { id: 'pengguna:admin', label: 'Akun Admin' },
+      { id: 'pengguna:guru', label: 'Akun Guru dan Staf' },
+      { id: 'pengguna:siswa', label: 'Akun Siswa' },
+      { id: 'pengguna:semua', label: 'Semua Akun' }
+    ] },
+    { id: 'sampah', label: 'Tempat Sampah', icon: Trash2 }
+  ];
+
+  const activeNavId = activeTab === 'internal'
+    ? `internal:${internalSubTab}`
+    : activeTab === 'pengguna'
+      ? `pengguna:${userAccountGroup}`
+      : activeTab;
+
+  const selectAdminNav = (id: string) => {
+    if (id.startsWith('internal:')) {
+      setInternalSubTab(id.split(':')[1] as typeof internalSubTab);
+      setActiveTab('internal');
+    } else if (id.startsWith('pengguna:')) {
+      setUserAccountGroup(id.split(':')[1] as typeof userAccountGroup);
+      setActiveTab('pengguna');
+    } else {
+      setActiveTab(id as AdminTab);
+    }
+  };
+
   return (
-    <div className="mx-auto w-full min-w-0 max-w-7xl space-y-6 px-3 py-6 sm:space-y-8 sm:px-8 sm:py-8 lg:py-12">
+    <div className="mx-auto grid w-full min-w-0 max-w-[1600px] gap-4 px-3 py-6 sm:px-8 sm:py-8 lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-6 lg:py-12">
       <input
         ref={studentRosterFileInputRef}
         type="file"
@@ -2018,242 +2063,107 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
         className="hidden"
         onChange={event => handleRosterFileChange(event, 'teachers')}
       />
-      {/* Admin Header */}
-      <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900 p-4 text-white shadow-xl sm:p-8">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-1.5">
-            <p className="text-sm font-semibold text-blue-200">Selamat datang</p>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-blue-800 text-blue-200 uppercase font-semibold">
-                Administrator Sistem & Tata Usaha
-              </span>
-              {isSyncing ? (
-                <span className="text-[10px] text-amber-300 font-mono flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-                  Menyinkronkan...
-                </span>
-              ) : (
-                lastSyncTime && (
-                  <span className="text-[10px] text-slate-400 font-mono">
-                    Sinkron: {lastSyncTime}
+      <PortalSidebar title="Dashboard Admin" items={adminNavItems} activeId={activeNavId} onSelect={selectAdminNav} />
+      <div className="min-w-0 space-y-6 sm:space-y-8">
+      {/* Admin dashboard overview */}
+      <div className="space-y-5">
+        <section className="relative isolate overflow-hidden rounded-3xl border border-blue-950 bg-gradient-to-br from-slate-950 via-blue-950 to-blue-900 p-5 text-white shadow-xl sm:p-7 lg:p-8">
+          <div className="pointer-events-none absolute -right-16 -top-24 -z-10 h-72 w-72 rounded-full bg-amber-300/10 blur-3xl" />
+          <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
+            <div className="min-w-0 space-y-3">
+              <p className="text-sm font-medium text-blue-100">Selamat datang</p>
+              <div>
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <span className="rounded-full border border-amber-300/30 bg-amber-300/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-200">
+                    Administrator Sistem & Tata Usaha
                   </span>
-                )
-              )}
+                </div>
+                <h1 className="mt-1 break-words font-serif-title text-2xl font-bold leading-tight text-white sm:text-3xl lg:text-4xl">
+                  Dashboard Admin Sekolah
+                </h1>
+                <p className="mt-2 max-w-2xl text-xs leading-relaxed text-blue-100/75 sm:text-sm">
+                  Pusat pengelolaan data, layanan, dan informasi SMA Negeri 1 Halmahera Tengah.
+                </p>
+              </div>
             </div>
-            <h1 className="break-words font-serif-title text-xl font-bold text-white sm:text-3xl">
-              Dashboard Admin Sekolah
-            </h1>
-          </div>
-
-          <div className="flex w-full flex-col gap-3 md:w-auto md:items-end">
-            <div className="flex w-full flex-wrap items-center gap-2 md:w-auto md:justify-end">
+            <div className="flex flex-col gap-2 xl:max-w-[390px] xl:items-end">
+              <span className="inline-flex items-center gap-1.5 self-start text-[10px] font-medium text-blue-100/80 xl:self-end">
+                <span className={`h-1.5 w-1.5 rounded-full ${isSyncing ? 'animate-pulse bg-amber-300' : 'bg-emerald-400'}`} />
+                {isSyncing ? 'Menyinkronkan data' : lastSyncTime ? `Sinkron terakhir ${lastSyncTime}` : 'Sistem siap'}
+              </span>
+              <div className="flex flex-wrap gap-2 xl:justify-end">
               <button
                 onClick={loadAllServerData}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-medium text-slate-200 shadow-sm transition-colors hover:bg-slate-700 md:flex-none"
+                className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-white/15 sm:flex-none"
                 title="Sinkronkan ulang data dari server"
               >
-                <RotateCcw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-                <span>Muat Ulang</span>
+                <RotateCcw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                Muat Ulang
               </button>
               <button
                 onClick={handleResetSchoolData}
                 disabled={isResettingSchoolData}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-rose-800/60 bg-rose-950/60 px-3.5 py-2 text-xs font-medium text-rose-200 shadow-sm transition-colors hover:bg-rose-900/80 md:flex-none"
+                className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-rose-300/30 bg-rose-500/10 px-3.5 py-2 text-xs font-semibold text-rose-100 transition hover:bg-rose-500/20 disabled:opacity-50 sm:flex-none"
                 title="Hapus data sekolah di PostgreSQL; akun admin tetap tersedia"
               >
-                <AlertTriangle className={`w-3.5 h-3.5 ${isResettingSchoolData ? 'animate-pulse' : ''}`} />
-                <span>{isResettingSchoolData ? 'Mereset...' : 'Reset Data Sekolah'}</span>
+                <AlertTriangle className={`h-3.5 w-3.5 ${isResettingSchoolData ? 'animate-pulse' : ''}`} />
+                {isResettingSchoolData ? 'Mereset...' : 'Reset Data'}
               </button>
+              <button
+                type="button"
+                onClick={onLogout}
+                className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-amber-400 px-3.5 py-2 text-xs font-bold text-slate-950 transition hover:bg-amber-300 sm:flex-none"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                Keluar
+              </button>
+              </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        {/* Top Statistics Counters */}
-        <div className="grid grid-cols-2 gap-3 mt-8 pt-6 border-t border-white/10 sm:grid-cols-3 xl:grid-cols-6">
-          <div className="bg-white/[0.06] p-4 rounded-xl border border-white/10 shadow-sm">
-            <span className="text-slate-300 block text-[11px] font-medium">Total Siswa</span>
-            <span className="font-mono text-2xl font-bold text-white tabular-nums">
-              {students.length} <span className="text-xs font-normal text-slate-400">Jiwa</span>
-            </span>
-          </div>
-          <div className="bg-white/[0.06] p-4 rounded-xl border border-white/10 shadow-sm">
-            <span className="text-slate-300 block text-[11px] font-medium">Direktori Guru</span>
-            <span className="font-mono text-2xl font-bold text-emerald-300 tabular-nums">
-              {teachers.length} <span className="text-xs font-normal text-slate-400">Guru</span>
-            </span>
-          </div>
-          <div className="bg-white/[0.06] p-4 rounded-xl border border-white/10 shadow-sm">
-            <span className="text-slate-300 block text-[11px] font-medium">Pendaftar PPDB</span>
-            <span className="font-mono text-2xl font-bold text-amber-300 tabular-nums">
-              {applicants.length} <span className="text-xs font-normal text-slate-400">Calon</span>
-            </span>
-          </div>
-          <div className="bg-white/[0.06] p-4 rounded-xl border border-white/10 shadow-sm">
-            <span className="text-slate-300 block text-[11px] font-medium">Warta / Pengumuman</span>
-            <span className="font-mono text-2xl font-bold text-sky-300 tabular-nums">
-              {announcements.length} <span className="text-xs font-normal text-slate-400">Pos</span>
-            </span>
-          </div>
-          <div className="bg-white/[0.06] p-4 rounded-xl border border-white/10 shadow-sm">
-            <span className="text-slate-300 block text-[11px] font-medium">Galeri & Video</span>
-            <span className="font-mono text-2xl font-bold text-violet-300 tabular-nums">
-              {galleryItems.length + videos.length} <span className="text-xs font-normal text-slate-400">Item</span>
-            </span>
-          </div>
-          <div className="bg-white/[0.06] p-4 rounded-xl border border-white/10 shadow-sm">
-            <span className="text-slate-300 block text-[11px] font-medium">Akun Terdaftar</span>
-            <span className="font-mono text-2xl font-bold text-teal-300 tabular-nums">
-              {users.length} <span className="text-xs font-normal text-slate-400">User</span>
-            </span>
-          </div>
-        </div>
-
-        {/* Tab Selector */}
-        <div className="mt-8 pt-6 border-t border-slate-800 flex items-center gap-2 overflow-x-auto pb-2 scrollbar-thin">
-          <button
-            onClick={() => setActiveTab('siswa')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'siswa'
-                ? 'bg-blue-800 text-white shadow-md'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span>Siswa ({students.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('guru')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'guru'
-                ? 'bg-blue-800 text-white shadow-md'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <GraduationCap className="w-3.5 h-3.5" />
-            <span>Guru & Staf ({teachers.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('ppdb')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'ppdb'
-                ? 'bg-blue-800 text-white shadow-md'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <FileCheck className="w-3.5 h-3.5" />
-            <span>Verifikasi PPDB ({applicants.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('pengumuman')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'pengumuman'
-                ? 'bg-blue-800 text-white shadow-md'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <Bell className="w-3.5 h-3.5" />
-            <span>Pengumuman ({announcements.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('galeri')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'galeri'
-                ? 'bg-blue-800 text-white shadow-md'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <Images className="w-3.5 h-3.5" />
-            <span>Galeri Foto ({galleryItems.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('video')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'video'
-                ? 'bg-blue-800 text-white shadow-md'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <Video className="w-3.5 h-3.5" />
-            <span>Video YouTube ({videos.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('kombel')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'kombel'
-                ? 'bg-blue-800 text-white shadow-md'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <BookOpen className="w-3.5 h-3.5" />
-            <span>KOMBEL ({kombelActivities.length + kombelAgendas.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('internal')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'internal'
-                ? 'bg-blue-800 text-white shadow-md'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <MessageSquare className="w-3.5 h-3.5" />
-            <span>Info Internal ({internalAnnouncements.length + internalAssignments.length + internalSubmissions.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('pesan')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'pesan'
-                ? 'bg-blue-800 text-white shadow-md'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <MessageSquare className="w-3.5 h-3.5" />
-            <span>Aspirasi ({messages.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('kontak')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'kontak'
-                ? 'bg-blue-800 text-white shadow-md'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <Contact className="w-3.5 h-3.5" />
-            <span>Info Kontak</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('pengguna')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'pengguna'
-                ? 'bg-blue-800 text-white shadow-md'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <Key className="w-3.5 h-3.5" />
-            <span>Kelola Akun & Sandi ({users.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('sampah')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'sampah'
-                ? 'bg-rose-800 text-white shadow-md'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span>Tempat Sampah</span>
-          </button>
-        </div>
+        <section aria-label="Ringkasan data sekolah" className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+          {[
+            { label: 'Peserta Didik', value: students.length, unit: 'siswa', icon: Users, tone: 'blue' },
+            { label: 'Guru & Staf', value: teachers.length, unit: 'orang', icon: GraduationCap, tone: 'emerald' },
+            { label: 'Pendaftar PPDB', value: applicants.length, unit: 'calon', icon: FileCheck, tone: 'amber' },
+            { label: 'Pengumuman', value: announcements.length, unit: 'pos', icon: Bell, tone: 'sky' },
+            { label: 'Galeri & Video', value: galleryItems.length + videos.length, unit: 'media', icon: Images, tone: 'violet' },
+            { label: 'Akun Terdaftar', value: users.length, unit: 'akun', icon: Shield, tone: 'teal' }
+          ].map(stat => {
+            const Icon = stat.icon;
+            const tones: Record<string, string> = {
+              blue: 'bg-blue-50 text-blue-800 ring-blue-100',
+              emerald: 'bg-emerald-50 text-emerald-800 ring-emerald-100',
+              amber: 'bg-amber-50 text-amber-800 ring-amber-100',
+              sky: 'bg-sky-50 text-sky-800 ring-sky-100',
+              violet: 'bg-violet-50 text-violet-800 ring-violet-100',
+              teal: 'bg-teal-50 text-teal-800 ring-teal-100'
+            };
+            const surfaces: Record<string, string> = {
+              blue: 'from-white to-blue-50/70 hover:border-blue-200',
+              emerald: 'from-white to-emerald-50/70 hover:border-emerald-200',
+              amber: 'from-white to-amber-50/70 hover:border-amber-200',
+              sky: 'from-white to-sky-50/70 hover:border-sky-200',
+              violet: 'from-white to-violet-50/70 hover:border-violet-200',
+              teal: 'from-white to-teal-50/70 hover:border-teal-200'
+            };
+            return (
+              <article key={stat.label} className={`min-w-0 rounded-xl border border-slate-200/80 bg-gradient-to-br ${surfaces[stat.tone]} p-3 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md sm:p-3.5`}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate text-[9px] font-bold uppercase tracking-[0.08em] text-slate-500">{stat.label}</span>
+                  <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg ring-1 ${tones[stat.tone]}`}>
+                    <Icon className="h-3.5 w-3.5" />
+                  </span>
+                </div>
+                <div className="mt-2 flex items-baseline gap-1.5">
+                  <p className="font-mono text-xl font-bold tabular-nums leading-none text-slate-900 sm:text-2xl">{stat.value}</p>
+                  <span className="text-[10px] text-slate-500">{stat.unit}</span>
+                </div>
+              </article>
+            );
+          })}
+        </section>
       </div>
 
       {/* =========================================================================
@@ -3347,9 +3257,24 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
             <div className="space-y-4">
               {isInternalAnnouncementFormOpen && (
                 <form onSubmit={handleSaveInternalAnnouncement} className="space-y-4 rounded-xl border border-blue-200 bg-blue-50/50 p-4">
-                  <div>
-                    <h3 className="font-bold text-slate-900">{editingInternalAnnouncement ? 'Ubah pengumuman internal' : 'Buat pengumuman internal'}</h3>
-                    <p className="mt-1 text-xs text-slate-600">Pengumuman ini akan tampil kepada murid sesuai kategori kelas yang dipilih.</p>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="font-bold text-slate-900">{editingInternalAnnouncement ? 'Ubah pengumuman internal' : 'Buat pengumuman internal'}</h3>
+                      <p className="mt-1 text-xs text-slate-600">Pengumuman ini akan tampil kepada murid sesuai kategori kelas yang dipilih.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsInternalAnnouncementFormOpen(false);
+                        setEditingInternalAnnouncement(null);
+                        setInternalAnnouncementImageFile(null);
+                        setInternalAnnouncementDocumentFile(null);
+                      }}
+                      aria-label="Tutup formulir pengumuman internal"
+                      className="shrink-0 rounded-lg p-1.5 text-slate-400 transition hover:bg-white hover:text-slate-700"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="space-y-1 text-xs font-semibold text-slate-700">
@@ -3571,13 +3496,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
               <h2 className="text-sm font-bold text-blue-950">Jadwal rutin, tempat, dan tujuan KOMBEL</h2>
               <p className="mt-1 text-xs text-blue-800">Kelola informasi yang tampil pada halaman Komunitas Belajar.</p>
             </div>
-            <button
-              type="button"
-              onClick={() => onNavigate?.('kombel')}
-              className="shrink-0 rounded-lg bg-blue-900 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-800"
-            >
-              Ubah Informasi KOMBEL
-            </button>
           </div>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
             <div className="flex items-center gap-2">
@@ -5660,6 +5578,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout,
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };

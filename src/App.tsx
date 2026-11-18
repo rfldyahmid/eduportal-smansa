@@ -44,6 +44,9 @@ export default function App() {
           } else {
             setActiveSession(verifiedUser);
             setCurrentUser(verifiedUser);
+            if (verifiedUser.role === 'admin' || verifiedUser.role === 'kepala_sekolah') {
+              setCurrentTab('portal');
+            }
           }
         } catch {
           // Do not restore a browser-cached session when the server no longer recognizes it.
@@ -101,10 +104,13 @@ export default function App() {
     );
   }
 
+  const isStandaloneAdminPortal = currentTab === 'portal' &&
+    (currentUser?.role === 'admin' || currentUser?.role === 'kepala_sekolah');
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 selection:bg-blue-900 selection:text-white">
       {/* Top Navigation */}
-      <Header
+      {!isStandaloneAdminPortal && <Header
         currentTab={currentTab}
         setCurrentTab={handleNavigate}
         currentUser={currentUser}
@@ -113,7 +119,7 @@ export default function App() {
         onLogout={handleLogout}
         isDarkMode={isDarkMode}
         onToggleTheme={() => setIsDarkMode(mode => !mode)}
-      />
+      />}
 
       {/* Main Content Sections */}
       <main className="min-w-0 w-full flex-1">
@@ -198,7 +204,6 @@ export default function App() {
               <AdminPortal
                 currentUser={currentUser}
                 onLogout={handleLogout}
-                onNavigate={handleNavigate}
               />
             )}
           </div>
@@ -207,10 +212,10 @@ export default function App() {
       </main>
 
       {/* Institutional Footer */}
-      <Footer
+      {!isStandaloneAdminPortal && <Footer
         onNavigate={handleNavigate}
         onOpenPortal={handleOpenPortal}
-      />
+      />}
 
       {/* Encrypted Authentication Modal */}
       <AuthModal

@@ -29,6 +29,8 @@ import {
   updateAssignment,
   removeAssignment,
   fetchSubmissions,
+  fetchScheduleNotificationReads,
+  markScheduleNotificationsRead,
   fetchPortalAnnouncements,
   savePortalAnnouncementApi,
   removePortalAnnouncementApi,
@@ -38,6 +40,7 @@ import {
 import { getProfileAvatar } from '../../utils/profileAvatar';
 import { SCHOOL_CLASSES } from '../../utils/schoolClasses';
 import { PortalAnnouncementAttachments } from './PortalAnnouncementAttachments';
+import { getActiveScheduleNotifications } from '../../utils/activeScheduleNotifications';
 
 interface TeacherPortalProps {
   currentUser: UserAccount;
@@ -45,6 +48,14 @@ interface TeacherPortalProps {
 }
 
 const DAYS: ScheduleItem['day'][] = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+
+const getDeadlineAfterDays = (days: number) => {
+  const deadline = new Date();
+  deadline.setDate(deadline.getDate() + days);
+  deadline.setHours(23, 59, 0, 0);
+  const localDeadline = new Date(deadline.getTime() - deadline.getTimezoneOffset() * 60_000);
+  return localDeadline.toISOString().slice(0, 16);
+};
 
 export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNavigate }) => {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -64,6 +75,9 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
   };
 
   const [activeTab, setActiveTab] = useState<'jadwal' | 'tugas' | 'kiriman' | 'pengumuman'>('jadwal');
+  const [scheduleDayFilter, setScheduleDayFilter] = useState<ScheduleItem['day'] | 'Semua'>('Semua');
+  const [seenScheduleNotificationKeys, setSeenScheduleNotificationKeys] = useState<string[]>([]);
+  const [clockNow, setClockNow] = useState(() => new Date());
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [submissions, setSubmissions] = useState<AssignmentSubmission[]>([]);
@@ -87,7 +101,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
     subject: teacher.subject,
     teacherName: teacher.fullName,
     teacherId: teacher.id,
-    classId: teacher.classesTaught[0] || 'X-A',
+    classId: SCHOOL_CLASSES[0],
     room: '',
     colorTag: 'blue'
   });
@@ -97,11 +111,11 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
     subject: teacher.subject,
     teacherId: teacher.id,
     teacherName: teacher.fullName,
-    classId: teacher.classesTaught[0] || 'X-A',
-    className: teacher.classesTaught[0] || 'X-A',
+    classId: SCHOOL_CLASSES[0],
+    className: SCHOOL_CLASSES[0],
     title: '',
     description: '',
-    deadline: '2026-10-30T23:59',
+    deadline: getDeadlineAfterDays(7),
     maxScore: 100,
     createdAt: new Date().toISOString()
   });
@@ -127,6 +141,12 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
     if (isLoadingData.current) return;
     isLoadingData.current = true;
     try {
+      try {
+        const scheduleReads = await fetchScheduleNotificationReads();
+        setSeenScheduleNotificationKeys(current => Array.from(new Set([...current, ...scheduleReads])));
+      } catch (error) {
+        console.error('Status notifikasi jadwal gagal dimuat dari server.', error);
+      }
       const [backendTeachers, backendScheds, backendAsgs, backendSubs, backendAnnouncements] = await Promise.all([
         fetchTeachers(),
         fetchSchedules(),
@@ -175,7 +195,18 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
     };
   }, []);
 
+  useEffect(() => {
+    const clockTimer = window.setInterval(() => setClockNow(new Date()), 15_000);
+    return () => window.clearInterval(clockTimer);
+  }, []);
+
   const mySchedules = useMemo(() => schedules.filter(s => s.teacherId === teacher.id), [schedules, teacher.id]);
+  const unreadActiveScheduleNotifications = getActiveScheduleNotifications(mySchedules, clockNow)
+    .filter(notification => !seenScheduleNotificationKeys.includes(notification.key));
+  const visibleSchedules = useMemo(
+    () => scheduleDayFilter === 'Semua' ? mySchedules : mySchedules.filter(item => item.day === scheduleDayFilter),
+    [mySchedules, scheduleDayFilter]
+  );
   const myAssignments = useMemo(() => assignments.filter(a => a.teacherId === teacher.id), [assignments, teacher.id]);
   const mySubmissions = useMemo(
     () => submissions.filter(submission => myAssignments.some(assignment => assignment.id === submission.assignmentId)),
@@ -186,6 +217,15 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
     [announcements, teacher.id]
   );
 
+  const markActiveScheduleNotificationRead = async (key: string) => {
+    setSeenScheduleNotificationKeys(current => current.includes(key) ? current : [...current, key]);
+    try {
+      await markScheduleNotificationsRead([key]);
+    } catch (error) {
+      console.error('Status notifikasi jadwal gagal disimpan ke server.', error);
+    }
+  };
+
   const resetSchedule = () => {
     setScheduleForm({
       id: '',
@@ -195,7 +235,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
       subject: teacher.subject,
       teacherName: teacher.fullName,
       teacherId: teacher.id,
-      classId: teacher.classesTaught[0] || 'X-A',
+      classId: SCHOOL_CLASSES[0],
       room: '',
       colorTag: 'blue'
     });
@@ -208,15 +248,19 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
       subject: teacher.subject,
       teacherId: teacher.id,
       teacherName: teacher.fullName,
-      classId: teacher.classesTaught[0] || 'X-A',
-      className: teacher.classesTaught[0] || 'X-A',
+      classId: SCHOOL_CLASSES[0],
+      className: SCHOOL_CLASSES[0],
       title: '',
       description: '',
-      deadline: '2026-10-30T23:59',
+      deadline: getDeadlineAfterDays(7),
       maxScore: 100,
       createdAt: new Date().toISOString()
     });
     setEditingAssignment(false);
+  };
+
+  const setAssignmentDeadlinePreset = (days: number) => {
+    setAssignmentForm(current => ({ ...current, deadline: getDeadlineAfterDays(days) }));
   };
 
   const resetAnnouncement = () => {
@@ -403,13 +447,6 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
           </div>
           <div className="min-w-0">
             <p className="text-xs font-semibold text-amber-300">Selamat datang</p>
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              {currentUser.role === 'ketua_kombel' && (
-                <span className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 font-bold text-[10px]">
-                  Ketua KOMBEL
-                </span>
-              )}
-            </div>
             <h1 className="mt-0.5 break-words text-xl font-bold sm:text-3xl">{currentUser.fullName.trim() || currentUser.username}</h1>
           </div>
         </div>
@@ -445,6 +482,30 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
             <ExternalLink className="w-3.5 h-3.5" />
           </button>
         </div>
+      )}
+
+      {unreadActiveScheduleNotifications.length > 0 && (
+        <section aria-live="polite" className="space-y-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm sm:p-5">
+          <div className="flex items-center gap-2">
+            <CalendarDays className="h-4 w-4 text-amber-700" />
+            <h2 className="text-sm font-bold text-amber-950">Jadwal mengajar sedang berlangsung</h2>
+          </div>
+          {unreadActiveScheduleNotifications.map(({ key, schedule }) => (
+            <div key={key} className="flex flex-col gap-3 rounded-xl border border-amber-200/80 bg-white/80 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-900">{schedule.subject} · Kelas {schedule.classId}</p>
+                <p className="mt-0.5 text-xs text-slate-600">{schedule.day}, {schedule.startTime}–{schedule.endTime}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void markActiveScheduleNotificationRead(key)}
+                className="shrink-0 rounded-lg bg-amber-400 px-3 py-2 text-xs font-bold text-amber-950 transition hover:bg-amber-300"
+              >
+                Tandai sudah dilihat
+              </button>
+            </div>
+          ))}
+        </section>
       )}
 
       {/* Tabs */}
@@ -526,17 +587,8 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
                 value={scheduleForm.classId}
                 onChange={e => setScheduleForm({ ...scheduleForm, classId: e.target.value })}
               >
-                {teacher.classesTaught.map(c => <option key={c}>{c}</option>)}
+                {SCHOOL_CLASSES.map(classId => <option key={classId} value={classId}>{classId}</option>)}
               </select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-700">Ruangan</label>
-              <input
-                className="w-full border rounded-lg p-2 text-xs"
-                placeholder="Contoh: Lab Fisika / Ruang Teori"
-                value={scheduleForm.room}
-                onChange={e => setScheduleForm({ ...scheduleForm, room: e.target.value })}
-              />
             </div>
             <button className="w-full rounded-lg bg-blue-900 text-white py-2 text-xs font-semibold inline-flex justify-center items-center gap-2 cursor-pointer">
               <Save size={15} /> {editingSchedule ? 'Simpan Perubahan' : 'Publikasikan Jadwal'}
@@ -544,19 +596,32 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
           </form>
 
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-            <div className="p-5 border-b">
-              <h2 className="font-bold text-base text-slate-900">Jadwal yang Anda Kelola ({mySchedules.length})</h2>
+            <div className="flex flex-col gap-3 border-b p-5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="font-bold text-base text-slate-900">Jadwal yang Anda Kelola ({mySchedules.length})</h2>
               <p className="text-xs text-slate-500 mt-0.5">Siswa melihat jadwal ini otomatis sesuai kelasnya.</p>
+              </div>
+              <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                <span>Filter hari</span>
+                <select
+                  value={scheduleDayFilter}
+                  onChange={event => setScheduleDayFilter(event.target.value as typeof scheduleDayFilter)}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700 focus:border-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                >
+                  <option value="Semua">Semua Hari</option>
+                  {DAYS.map(day => <option key={day} value={day}>{day}</option>)}
+                </select>
+              </label>
             </div>
             <div className="divide-y text-xs">
-              {mySchedules.length ? (
-                mySchedules.map(item => (
+              {visibleSchedules.length ? (
+                visibleSchedules.map(item => (
                   <div key={item.id} className="p-4 flex flex-col md:flex-row md:items-center gap-3">
                     <div className="w-20 font-bold text-blue-900">{item.day}</div>
                     <div className="w-24 font-mono text-slate-500">{item.startTime}–{item.endTime}</div>
                     <div className="flex-1">
                       <div className="font-bold text-slate-900">{item.subject}</div>
-                      <div className="text-[11px] text-slate-500">{item.classId} · {item.room || 'Ruang Teori'}</div>
+                      <div className="text-[11px] text-slate-500">{item.classId}</div>
                     </div>
                     <div className="flex gap-1">
                       <button onClick={() => startEditSchedule(item)} className="p-1.5 rounded hover:bg-slate-100 text-slate-600" title="Edit"><Pencil size={14} /></button>
@@ -565,7 +630,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
                   </div>
                 ))
               ) : (
-                <div className="p-10 text-center text-slate-500">Belum ada jadwal mengajar.</div>
+                <div className="p-10 text-center text-slate-500">{mySchedules.length ? `Tidak ada jadwal mengajar pada hari ${scheduleDayFilter}.` : 'Belum ada jadwal mengajar.'}</div>
               )}
             </div>
           </div>
@@ -609,7 +674,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
                   value={assignmentForm.classId}
                   onChange={e => setAssignmentForm({ ...assignmentForm, classId: e.target.value, className: e.target.value })}
                 >
-                  {teacher.classesTaught.map(c => <option key={c}>{c}</option>)}
+                  {SCHOOL_CLASSES.map(classId => <option key={classId} value={classId}>{classId}</option>)}
                 </select>
               </div>
               <div className="space-y-1">
@@ -623,27 +688,31 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
                   onChange={e => setAssignmentForm({ ...assignmentForm, description: e.target.value })}
                 />
               </div>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-600">Batas Waktu (Deadline)</label>
-                  <input
-                    required
-                    className="w-full border rounded-lg p-2 text-xs"
-                    type="datetime-local"
-                    value={assignmentForm.deadline}
-                    onChange={e => setAssignmentForm({ ...assignmentForm, deadline: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-600">Maksimal Nilai</label>
-                  <input
-                    className="w-full border rounded-lg p-2 text-xs"
-                    type="number"
-                    min="1"
-                    max="100"
-                    value={assignmentForm.maxScore}
-                    onChange={e => setAssignmentForm({ ...assignmentForm, maxScore: Number(e.target.value) })}
-                  />
+              <div className="space-y-2">
+                <label className="block text-[11px] font-semibold text-slate-600">Batas Waktu Pengumpulan</label>
+                <input
+                  required
+                  className="w-full rounded-lg border border-slate-300 bg-white p-2.5 text-sm text-slate-700 focus:border-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                  type="datetime-local"
+                  value={assignmentForm.deadline}
+                  onChange={e => setAssignmentForm({ ...assignmentForm, deadline: e.target.value })}
+                />
+                <p className="text-[10px] text-slate-500">Atur tanggal dan jam, atau pilih waktu cepat:</p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { days: 1, label: 'Besok' },
+                    { days: 3, label: '3 hari lagi' },
+                    { days: 7, label: '1 minggu lagi' }
+                  ].map(preset => (
+                    <button
+                      key={preset.days}
+                      type="button"
+                      onClick={() => setAssignmentDeadlinePreset(preset.days)}
+                      className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-[10px] font-semibold text-blue-900 transition hover:bg-blue-100"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
                 </div>
               </div>
               <button className="w-full rounded-lg bg-blue-900 text-white py-2 text-xs font-semibold inline-flex justify-center items-center gap-2 cursor-pointer">
@@ -673,7 +742,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
                               <span className="font-bold text-slate-900 text-sm">{item.title}</span>
                             </div>
                             <div className="text-slate-500 text-[11px] mt-1">
-                              Deadline: {item.deadline} · Maksimal Nilai: {item.maxScore}
+                              Deadline: {item.deadline}
                             </div>
                           </div>
 

@@ -2170,6 +2170,36 @@ app.post('/api/student/notification-reads', requireAuth, async (req: Authenticat
   res.status(204).end();
 });
 
+app.get('/api/schedule-notification-reads', requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (!['siswa', 'guru', 'ketua_kombel', 'kepala_sekolah'].includes(req.user?.role || '')) {
+    return res.status(403).json({ message: 'Endpoint ini tidak tersedia untuk peran akun ini.' });
+  }
+  const result = await pool.query(
+    'SELECT notification_key FROM schedule_notification_reads WHERE user_id = $1',
+    [req.user?.sub]
+  );
+  res.set('Cache-Control', 'no-store').json(result.rows.map(row => row.notification_key));
+});
+
+app.post('/api/schedule-notification-reads', requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (!['siswa', 'guru', 'ketua_kombel', 'kepala_sekolah'].includes(req.user?.role || '')) {
+    return res.status(403).json({ message: 'Endpoint ini tidak tersedia untuk peran akun ini.' });
+  }
+  const keys = req.body?.keys;
+  if (!Array.isArray(keys) || keys.length > 200 || keys.some(key => typeof key !== 'string' || !key.trim() || key.length > 4000)) {
+    return res.status(400).json({ message: 'Daftar notifikasi jadwal tidak valid.' });
+  }
+  if (keys.length) {
+    await pool.query(
+      `INSERT INTO schedule_notification_reads (user_id, notification_key)
+       SELECT $1, notification_key FROM unnest($2::text[]) AS notification_key
+       ON CONFLICT (user_id, notification_key) DO NOTHING`,
+      [req.user?.sub, [...new Set(keys as string[])]]
+    );
+  }
+  res.status(204).end();
+});
+
 app.post('/api/students', requireAdmin, async (req, res) => {
   try {
     const body = req.body || {};

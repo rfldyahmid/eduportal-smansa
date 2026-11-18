@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { formatNip } from '../utils/formatNip';
 import { Student, ScheduleItem } from '../types';
 import { Printer, X, Download, Calendar, MapPin, Clock, CheckCircle } from 'lucide-react';
@@ -27,6 +27,14 @@ export const PrintScheduleModal: React.FC<PrintScheduleModalProps> = ({
     window.print();
   };
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   return (
     <div
       role="dialog"
@@ -38,7 +46,7 @@ export const PrintScheduleModal: React.FC<PrintScheduleModalProps> = ({
         <div className="no-print flex flex-col gap-3 bg-slate-900 px-4 py-3.5 text-white sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div className="flex items-center gap-2 text-xs font-semibold">
             <Calendar className="w-4 h-4 text-amber-400" />
-            <span>Dokumen Resmi Jadwal Pembelajaran Siswa (Format Cetak / PDF)</span>
+            <span>Dokumen Resmi Jadwal Pembelajaran Siswa (Format PDF)</span>
           </div>
 
           <div className="flex items-center justify-end gap-2">
@@ -47,12 +55,13 @@ export const PrintScheduleModal: React.FC<PrintScheduleModalProps> = ({
               className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
             >
               <Printer className="w-4 h-4" />
-              <span>Cetak / Simpan PDF</span>
+              <span>Unduh / Simpan PDF</span>
             </button>
             <button
               onClick={onClose}
               className="p-2 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
               title="Tutup Pratinjau"
+              aria-label="Tutup pratinjau jadwal"
             >
               <X className="w-5 h-5" />
             </button>

@@ -6,7 +6,7 @@ import {
   Clock3,
   MapPin,
   ChevronRight,
-  Printer,
+  Download,
   Send,
   CheckCircle2,
   FileCheck,
@@ -16,10 +16,11 @@ import {
   MessageSquare
 } from 'lucide-react';
 import { Student, UserAccount, ScheduleItem, Assignment, PortalAnnouncement, AssignmentSubmission } from '../../types';
-import { fetchMyStudentProfile, fetchStudentNotificationReads, markStudentNotificationsRead, fetchAssignments, fetchPortalAnnouncements, fetchSubmissions, submitAssignment, fetchSchedules } from '../../utils/api';
+import { fetchMyStudentProfile, fetchStudentNotificationReads, markStudentNotificationsRead, fetchScheduleNotificationReads, markScheduleNotificationsRead, fetchAssignments, fetchPortalAnnouncements, fetchSubmissions, submitAssignment, fetchSchedules } from '../../utils/api';
 import { PrintScheduleModal } from '../PrintScheduleModal';
 import { PortalAnnouncementAttachments } from './PortalAnnouncementAttachments';
 import { getProfileAvatar } from '../../utils/profileAvatar';
+import { getActiveScheduleNotifications } from '../../utils/activeScheduleNotifications';
 
 interface StudentPortalProps {
   currentUser: UserAccount;
@@ -62,6 +63,8 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ currentUser, onLog
   const [submissions, setSubmissions] = useState<AssignmentSubmission[]>([]);
   const [announcements, setAnnouncements] = useState<PortalAnnouncement[]>([]);
   const [seenNotificationKeys, setSeenNotificationKeys] = useState<string[]>([]);
+  const [seenScheduleNotificationKeys, setSeenScheduleNotificationKeys] = useState<string[]>([]);
+  const [clockNow, setClockNow] = useState(() => new Date());
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
   // Submission Form State
@@ -104,6 +107,13 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ currentUser, onLog
         console.error('Status baca notifikasi gagal dimuat dari server.', error);
       }
       setSeenNotificationKeys(locallySeen);
+
+      try {
+        const scheduleReads = await fetchScheduleNotificationReads();
+        setSeenScheduleNotificationKeys(current => Array.from(new Set([...current, ...scheduleReads])));
+      } catch (error) {
+        console.error('Status notifikasi jadwal gagal dimuat dari server.', error);
+      }
 
       try {
         const [backendScheds, backendAsgs, backendSubs, backendAnnouncements] = await Promise.all([
@@ -149,9 +159,18 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ currentUser, onLog
     };
   }, [currentUser.id]);
 
+  useEffect(() => {
+    const clockTimer = window.setInterval(() => setClockNow(new Date()), 15_000);
+    return () => window.clearInterval(clockTimer);
+  }, []);
+
   const mySchedules = useMemo(
     () => schedules.filter(s => s.classId === student.classId),
     [schedules, student.classId]
+  );
+  const activeScheduleNotifications = getActiveScheduleNotifications(mySchedules, clockNow);
+  const unreadActiveScheduleNotifications = activeScheduleNotifications.filter(
+    notification => !seenScheduleNotificationKeys.includes(notification.key)
   );
   const daySchedules = mySchedules
     .filter(s => s.day === selectedDay)
@@ -212,6 +231,15 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ currentUser, onLog
     }
   };
 
+  const markActiveScheduleNotificationRead = async (key: string) => {
+    setSeenScheduleNotificationKeys(current => current.includes(key) ? current : [...current, key]);
+    try {
+      await markScheduleNotificationsRead([key]);
+    } catch (error) {
+      console.error('Status notifikasi jadwal gagal disimpan ke server.', error);
+    }
+  };
+
   if (profileLoadError || !studentProfile) {
     return (
       <div className="max-w-xl mx-auto px-4 py-16 text-center">
@@ -230,6 +258,9 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ currentUser, onLog
     if (tab === 'jadwal') {
       const visibleKeys = currentNotificationKeys.jadwal.filter((_, index) => mySchedules[index].day === selectedDay);
       markNotificationsRead(tab, visibleKeys);
+      activeScheduleNotifications
+        .filter(notification => notification.schedule.day === selectedDay)
+        .forEach(notification => void markActiveScheduleNotificationRead(notification.key));
     } else if (tab !== 'dashboard') {
       markNotificationsRead(tab);
     }
@@ -308,6 +339,36 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ currentUser, onLog
           </div>
         </div>
       </div>
+
+      {unreadActiveScheduleNotifications.length > 0 && (
+        <section aria-live="polite" className="space-y-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm sm:p-5">
+          <div className="flex items-center gap-2">
+            <Bell className="h-4 w-4 text-amber-700" />
+            <h2 className="text-sm font-bold text-amber-950">Jadwal belajar sedang berlangsung</h2>
+          </div>
+          {unreadActiveScheduleNotifications.map(({ key, schedule }) => (
+            <div key={key} className="flex flex-col gap-3 rounded-xl border border-amber-200/80 bg-white/80 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-900">{schedule.subject} · {schedule.startTime}–{schedule.endTime}</p>
+                <p className="mt-0.5 text-xs text-slate-600">Kelas {student.className} · Guru: {schedule.teacherName}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedDay(schedule.day);
+                  setActiveTab('jadwal');
+                  const dayKeys = currentNotificationKeys.jadwal.filter((_, index) => mySchedules[index].day === schedule.day);
+                  void markNotificationsRead('jadwal', dayKeys);
+                  void markActiveScheduleNotificationRead(key);
+                }}
+                className="shrink-0 rounded-lg bg-amber-400 px-3 py-2 text-xs font-bold text-amber-950 transition hover:bg-amber-300"
+              >
+                Lihat jadwal
+              </button>
+            </div>
+          ))}
+        </section>
+      )}
 
       {/* Tabs */}
       <div className="-mx-1 flex touch-pan-x gap-2 overflow-x-auto px-1 pb-2">
@@ -401,7 +462,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ currentUser, onLog
               onClick={() => setIsPrintModalOpen(true)}
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white text-xs font-semibold rounded-xl shadow-sm transition-colors cursor-pointer self-start sm:self-auto"
             >
-              <Printer size={15} /> Cetak Jadwal Resmi (PDF)
+              <Download size={15} /> Unduh Jadwal PDF
             </button>
           </div>
           <div className="flex gap-2 overflow-x-auto p-4 border-b border-slate-100">
@@ -412,6 +473,9 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ currentUser, onLog
                   setSelectedDay(day);
                   const visibleKeys = currentNotificationKeys.jadwal.filter((_, index) => mySchedules[index].day === day);
                   markNotificationsRead('jadwal', visibleKeys);
+                  activeScheduleNotifications
+                    .filter(notification => notification.schedule.day === day)
+                    .forEach(notification => void markActiveScheduleNotificationRead(notification.key));
                 }}
                 className={`shrink-0 px-4 py-2 rounded-lg text-xs font-semibold cursor-pointer ${selectedDay === day ? 'bg-blue-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                   }`}
@@ -482,7 +546,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ currentUser, onLog
                           </span>
                           {mySub.score !== undefined && (
                             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-900 font-mono">
-                              Nilai: {mySub.score} / {item.maxScore}
+                              Nilai: {mySub.score}
                             </span>
                           )}
                         </div>
