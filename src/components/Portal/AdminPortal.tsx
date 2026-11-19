@@ -125,7 +125,9 @@ import {
   Contact,
   FileSpreadsheet,
   Download,
-  LogOut
+  LogOut,
+  Menu,
+  X
 } from 'lucide-react';
 import { DEFAULT_CONTACT_INFO, CONTACT_INFO_UPDATED_EVENT } from '../../utils/contactInfo';
 import { normalizeSchoolClassId, SCHOOL_CLASSES } from '../../utils/schoolClasses';
@@ -213,6 +215,7 @@ const formatAnnouncementDate = (value: string) => {
 
 export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout }) => {
   const [activeTab, setActiveTab] = useState<AdminTab>('siswa');
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isAdminProfileModalOpen, setIsAdminProfileModalOpen] = useState(false);
   const [isSavingAdminProfile, setIsSavingAdminProfile] = useState(false);
   const [adminProfileError, setAdminProfileError] = useState('');
@@ -2036,6 +2039,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
       : activeTab;
 
   const selectAdminNav = (id: string) => {
+    setIsMobileNavOpen(false);
     if (id.startsWith('internal:')) {
       setInternalSubTab(id.split(':')[1] as typeof internalSubTab);
       setActiveTab('internal');
@@ -2048,7 +2052,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
   };
 
   return (
-    <div className="mx-auto grid w-full min-w-0 max-w-[1600px] gap-4 px-3 py-6 sm:px-8 sm:py-8 lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-6 lg:py-12">
+    <div className="mx-auto grid w-full min-w-0 max-w-[1600px] gap-4 px-3 py-4 sm:px-8 sm:py-8 lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-6 lg:py-12">
       <input
         ref={studentRosterFileInputRef}
         type="file"
@@ -2063,7 +2067,36 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
         className="hidden"
         onChange={event => handleRosterFileChange(event, 'teachers')}
       />
-      <PortalSidebar title="Dashboard Admin" items={adminNavItems} activeId={activeNavId} onSelect={selectAdminNav} />
+      <div className="hidden lg:block">
+        <PortalSidebar title="Dashboard Admin" items={adminNavItems} activeId={activeNavId} onSelect={selectAdminNav} />
+      </div>
+      <div className="min-w-0 lg:hidden">
+        <button
+          type="button"
+          onClick={() => setIsMobileNavOpen(true)}
+          aria-label="Buka menu dashboard admin"
+          aria-expanded={isMobileNavOpen}
+          className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-700"
+        >
+          <Menu className="h-5 w-5" />
+          Menu
+        </button>
+      </div>
+      {isMobileNavOpen && (
+        <div className="fixed inset-0 z-[100] lg:hidden" role="presentation" onMouseDown={event => {
+          if (event.target === event.currentTarget) setIsMobileNavOpen(false);
+        }}>
+          <div className="absolute inset-0 bg-slate-950/55" />
+          <div className="absolute inset-y-0 left-0 w-[min(21rem,88vw)] overflow-y-auto bg-slate-950 p-3 shadow-2xl animate-in slide-in-from-left duration-200">
+            <div className="mb-3 flex justify-end">
+              <button type="button" onClick={() => setIsMobileNavOpen(false)} aria-label="Tutup menu dashboard admin" className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-white hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <PortalSidebar title="Dashboard Admin" items={adminNavItems} activeId={activeNavId} onSelect={selectAdminNav} />
+          </div>
+        </div>
+      )}
       <div className="min-w-0 space-y-6 sm:space-y-8">
       {/* Admin dashboard overview */}
       <div className="space-y-5">
