@@ -126,8 +126,7 @@ import {
   FileSpreadsheet,
   Download,
   LogOut,
-  Menu,
-  X
+  Menu
 } from 'lucide-react';
 import { DEFAULT_CONTACT_INFO, CONTACT_INFO_UPDATED_EVENT } from '../../utils/contactInfo';
 import { normalizeSchoolClassId, SCHOOL_CLASSES } from '../../utils/schoolClasses';
