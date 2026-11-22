@@ -213,7 +213,10 @@ const formatAnnouncementDate = (value: string) => {
 };
 
 export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout }) => {
+  type NewAccountCredential = { role: string; fullName: string; username: string; password: string; className?: string };
   const [activeTab, setActiveTab] = useState<AdminTab>('siswa');
+  const [newAccountCredentials, setNewAccountCredentials] = useState<NewAccountCredential[]>([]);
+  const [credentialFeedback, setCredentialFeedback] = useState('');
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isAdminProfileModalOpen, setIsAdminProfileModalOpen] = useState(false);
   const [isSavingAdminProfile, setIsSavingAdminProfile] = useState(false);
@@ -424,6 +427,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
   const [isLoadingTrash, setIsLoadingTrash] = useState(false);
   const [isTrashActionInProgress, setIsTrashActionInProgress] = useState(false);
   const [trashBulkAction, setTrashBulkAction] = useState<'restore' | 'delete' | null>(null);
+  const [isDeletingAllTrash, setIsDeletingAllTrash] = useState(false);
+  const [copiedAccountId, setCopiedAccountId] = useState<string | null>(null);
   const [selectedTrashIds, setSelectedTrashIds] = useState<Set<string>>(new Set());
 
   // Status sinkronisasi backend
@@ -681,6 +686,38 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
     }
   };
 
+  const handlePermanentlyDeleteAllTrashItems = async () => {
+    if (isTrashActionInProgress || !trashItems.length) return;
+    const ids = trashItems.map(item => item.id);
+    if (!window.confirm(`Hapus permanen semua ${ids.length} item di Tempat Sampah? Tindakan ini tidak dapat dibatalkan.`)) return;
+    setIsDeletingAllTrash(true);
+    setIsTrashActionInProgress(true);
+    try {
+      const result = await permanentlyDeleteSelectedTrashItems(ids);
+      setTrashItems([]);
+      setSelectedTrashIds(new Set());
+      setTrashBulkAction(null);
+      window.alert(result.message);
+    } catch (error) {
+      await loadTrash();
+      window.alert(error instanceof Error ? error.message : 'Gagal menghapus semua item secara permanen.');
+    } finally {
+      setIsDeletingAllTrash(false);
+      setIsTrashActionInProgress(false);
+    }
+  };
+
+  const copyStudentAccount = async (user: UserAccount) => {
+    const details = [`Nama: ${user.fullName}`, `Username: ${user.username}`, `Kelas: ${getStudentClassForAccount(user)}`, ...(user.email ? [`Email: ${user.email}`] : [])].join('\n');
+    try {
+      await navigator.clipboard.writeText(details);
+      setCopiedAccountId(user.id);
+      window.setTimeout(() => setCopiedAccountId(current => current === user.id ? null : current), 2000);
+    } catch {
+      window.alert('Tidak dapat menyalin akun. Periksa izin clipboard browser.');
+    }
+  };
+
   const visibleTrashIds = trashItems.map(item => item.id);
   const allTrashSelected = visibleTrashIds.length > 0 && visibleTrashIds.every(id => selectedTrashIds.has(id));
 
@@ -762,9 +799,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
         const created = createdAccount.item;
         const next = [created, ...students];
         setStudents(next);
-        window.alert(
-          `Akun siswa berhasil dibuat. Simpan dan sampaikan kata sandi ini secara pribadi; kata sandi hanya ditampilkan sekali.\n\nUsername: ${createdAccount.username}\nKata sandi sementara: ${createdAccount.temporaryPassword}`
-        );
+        setUsers(await fetchUsers());
+        showNewAccountCredentials([{
+          role: 'siswa',
+          fullName: created.fullName,
+          username: createdAccount.username,
+          password: createdAccount.temporaryPassword,
+          className: created.className
+        }]);
       }
       setIsStudentModalOpen(false);
       loadAllServerData();
@@ -1723,22 +1765,59 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
   );
   const studentAccountCount = students.filter(hasStudentAccount).length;
   const teacherAccountCount = teachers.filter(hasTeacherAccount).length;
+  const missingStudentAccounts = students.filter(student => !hasStudentAccount(student)).length;
   const missingLinkedAccounts =
     students.filter(student => !hasStudentAccount(student)).length +
     teachers.filter(teacher => !hasTeacherAccount(teacher)).length;
   const countsMatch = studentAccountCount === students.length && teacherAccountCount === teachers.length;
 
-  const handleProvisionMissingAccounts = async () => {
+  const formatAccountCredentials = (accounts: NewAccountCredential[]) => accounts.map(account => [
+    `Peran: ${account.role.toUpperCase()}`,
+    `Nama: ${account.fullName}`,
+    ...(account.className ? [`Kelas: ${account.className}`] : []),
+    `Username: ${account.username}`,
+    `Kata sandi sementara: ${account.password}`
+  ].join('\n')).join('\n\n');
+
+  const showNewAccountCredentials = (accounts: NewAccountCredential[]) => {
+    setNewAccountCredentials(accounts);
+    setCredentialFeedback('');
+  };
+
+  const copyAccountCredentials = async (accounts = newAccountCredentials) => {
+    try {
+      await navigator.clipboard.writeText(formatAccountCredentials(accounts));
+      setCredentialFeedback('Informasi akun berhasil disalin.');
+    } catch {
+      setCredentialFeedback('Clipboard tidak tersedia. Gunakan tombol Unduh untuk menyimpan informasi akun.');
+    }
+  };
+
+  const downloadAccountCredentials = () => {
+    const file = new Blob([formatAccountCredentials(newAccountCredentials)], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(file);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `akun-baru-${new Date().toISOString().slice(0, 10)}.txt`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setCredentialFeedback('Informasi akun berhasil diunduh. Simpan berkas di tempat aman.');
+  };
+
+  const handleProvisionMissingAccounts = async (scope: 'semua' | 'siswa' = 'semua') => {
     setIsProvisioningAccounts(true);
     try {
-      const result = await provisionLinkedAccounts();
+      const result = await provisionLinkedAccounts(scope);
       setUsers(await fetchUsers());
-      loadAllServerData();
+      await loadAllServerData();
       if (result.created.length) {
-        const credentials = result.created.map(account =>
-          `${account.role.toUpperCase()} — ${account.fullName}\nUsername: ${account.username}\nSandi sementara: ${account.temporaryPassword}`
-        ).join('\n\n');
-        window.alert(`Akun untuk data lama berhasil dibuat. Simpan dan berikan sandi sementara secara pribadi; sandi hanya ditampilkan sekali.\n\n${credentials}`);
+        showNewAccountCredentials(result.created.map(account => ({
+          role: account.role,
+          fullName: account.fullName,
+          username: account.username,
+          password: account.temporaryPassword,
+          className: account.role === 'siswa' ? students.find(student => student.nisn === account.username)?.className : undefined
+        })));
       } else {
         window.alert('Tidak ada akun siswa/guru yang tertinggal untuk dibuat.');
       }
@@ -1816,7 +1895,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
         const result = await createManagedUser(userAccountForm);
         setUsers(await fetchUsers());
         setIsUserFormOpen(false);
-        window.alert(`${result.message}\n\nUsername: ${result.user.username}\nSandi sementara: ${result.temporaryPassword}\n\nSimpan sandi ini dan berikan secara pribadi. Sandi hanya ditampilkan sekali.`);
+        showNewAccountCredentials([{
+          role: result.user.role,
+          fullName: result.user.fullName,
+          username: result.user.username,
+          password: result.temporaryPassword,
+          className: result.user.role === 'siswa' ? students.find(student => student.nisn === result.user.username)?.className : undefined
+        }]);
       }
     } catch (error) {
       window.alert(error instanceof Error ? error.message : 'Gagal menyimpan akun.');
@@ -1837,6 +1922,26 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
       window.alert(result.message);
     } catch (error) {
       window.alert(error instanceof Error ? error.message : 'Gagal menghapus akun terpilih.');
+    } finally {
+      setIsDeletingAccounts(false);
+    }
+  };
+
+  const handleDeleteUserAccount = async (user: UserAccount) => {
+    if (isDeletingAccounts || user.id === currentUser.id) return;
+    if (!window.confirm(`Hapus akun ${user.fullName} (${user.username})? Akun akan dipindahkan ke Tempat Sampah dan dapat dipulihkan.`)) return;
+    setIsDeletingAccounts(true);
+    try {
+      const result = await bulkDeleteManagedUsers([user.id]);
+      setUsers(await fetchUsers());
+      setSelectedAccountIds(current => {
+        const next = new Set(current);
+        next.delete(user.id);
+        return next;
+      });
+      window.alert(result.message);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : `Gagal menghapus akun ${user.username}.`);
     } finally {
       setIsDeletingAccounts(false);
     }
@@ -2228,6 +2333,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
 
             <div className="flex flex-wrap items-center justify-end gap-2">
               {bulkDeleteToolbar('students', filteredStudents.map(item => item.id), 'siswa')}
+              <button
+                type="button"
+                onClick={() => void handleProvisionMissingAccounts('siswa')}
+                disabled={isProvisioningAccounts || missingStudentAccounts === 0}
+                title={missingStudentAccounts === 0 ? 'Semua data siswa sudah memiliki akun' : 'Buat akun untuk siswa yang belum memilikinya'}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-900 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <RotateCcw className={`h-4 w-4 ${isProvisioningAccounts ? 'animate-spin' : ''}`} />
+                {isProvisioningAccounts ? 'Sinkronisasi...' : `Sinkronkan Akun (${missingStudentAccounts})`}
+              </button>
               <button
                 type="button"
                 onClick={handleDownloadRosterTemplate}
@@ -3880,7 +3995,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
             {missingLinkedAccounts > 0 && (
               <button
                 type="button"
-                onClick={handleProvisionMissingAccounts}
+                onClick={() => void handleProvisionMissingAccounts('semua')}
                 disabled={isProvisioningAccounts}
                 className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-900 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-800 disabled:cursor-wait disabled:opacity-60"
               >
@@ -4282,12 +4397,29 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
                         </td>
                         <td className="py-3 px-4 text-right">
                           <div className="flex flex-wrap justify-end gap-1.5">
+                            {userAccountGroup === 'siswa' && (
+                              <button type="button" onClick={() => void copyStudentAccount(u)} className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-xs font-semibold text-emerald-900 hover:bg-emerald-100" title="Salin informasi akun siswa">
+                                {copiedAccountId === u.id ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                                {copiedAccountId === u.id ? 'Tersalin' : 'Salin akun'}
+                              </button>
+                            )}
                             <button onClick={() => handleOpenUserForm(u)} className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
                               <Edit2 className="h-3 w-3" /> Edit
                             </button>
                             <button onClick={() => handleOpenResetModal(u)} className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-1.5 text-xs font-semibold text-blue-900 hover:bg-blue-100">
                               <Key className="h-3 w-3" /> Reset Sandi
                             </button>
+                            {userAccountGroup === 'siswa' && (
+                              <button
+                                type="button"
+                                onClick={() => void handleDeleteUserAccount(u)}
+                                disabled={isDeletingAccounts || u.id === currentUser.id}
+                                className="inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                title="Pindahkan akun siswa ke Tempat Sampah"
+                              >
+                                <Trash2 className="h-3 w-3" /> Hapus
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -4331,6 +4463,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
                 className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${trashBulkAction === 'delete' ? 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50' : 'bg-rose-700 text-white hover:bg-rose-800'}`}
               >
                 <Trash2 className="h-4 w-4" /> {trashBulkAction === 'delete' ? 'Batal pilih' : 'Pilih untuk hapus'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handlePermanentlyDeleteAllTrashItems()}
+                disabled={!trashItems.length || isLoadingTrash || isTrashActionInProgress}
+                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-rose-800 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-900 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Trash2 className="h-4 w-4" /> {isDeletingAllTrash ? 'Menghapus semua...' : `Hapus Semua (${trashItems.length})`}
               </button>
               {trashBulkAction && (
                 <>
@@ -5608,6 +5748,46 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
               </div>
             </form>
           </div>
+        </div>
+      )}
+      {newAccountCredentials.length > 0 && (
+        <div role="dialog" aria-modal="true" aria-labelledby="new-account-credentials-title" className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-black/70 p-3 backdrop-blur-sm sm:items-center sm:p-5">
+          <section className="w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            <header className="bg-blue-950 px-5 py-4 text-white sm:px-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 id="new-account-credentials-title" className="text-lg font-bold">Akun Berhasil Dibuat ({newAccountCredentials.length})</h2>
+                  <p className="mt-1 text-xs text-blue-100">Simpan informasi ini sekarang. Kata sandi tidak dapat dilihat kembali setelah jendela ini ditutup.</p>
+                </div>
+                <button type="button" onClick={() => setNewAccountCredentials([])} aria-label="Tutup informasi akun" className="rounded-lg p-1.5 text-blue-100 hover:bg-white/10"><X className="h-5 w-5" /></button>
+              </div>
+            </header>
+            <div className="space-y-3 p-4 sm:p-6">
+              {newAccountCredentials.map((account, index) => (
+                <article key={`${account.username}-${index}`} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-bold text-slate-900">{account.fullName}</p>
+                      <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-blue-800">{account.role}{account.className ? ` · Kelas ${account.className}` : ''}</p>
+                    </div>
+                    <button type="button" onClick={() => void copyAccountCredentials([account])} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-blue-900 hover:bg-blue-50"><Copy className="h-3.5 w-3.5" /> Salin</button>
+                  </div>
+                  <dl className="grid gap-2 text-xs sm:grid-cols-2">
+                    <div><dt className="text-slate-500">Username</dt><dd className="mt-0.5 break-all font-mono font-semibold text-slate-900">{account.username}</dd></div>
+                    <div><dt className="text-slate-500">Kata sandi sementara</dt><dd className="mt-0.5 break-all font-mono font-semibold text-slate-900">{account.password}</dd></div>
+                  </dl>
+                </article>
+              ))}
+            </div>
+            <footer className="flex flex-col gap-3 border-t border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+              <p aria-live="polite" className="text-xs text-emerald-800">{credentialFeedback}</p>
+              <div className="flex flex-wrap justify-end gap-2">
+                <button type="button" onClick={downloadAccountCredentials} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"><Download className="h-4 w-4" /> Unduh TXT</button>
+                <button type="button" onClick={() => void copyAccountCredentials()} className="inline-flex items-center gap-2 rounded-lg bg-blue-900 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-800"><Copy className="h-4 w-4" /> Salin Semua</button>
+                <button type="button" onClick={() => setNewAccountCredentials([])} className="rounded-lg px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100">Tutup</button>
+              </div>
+            </footer>
+          </section>
         </div>
       )}
       </div>

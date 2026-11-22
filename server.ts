@@ -1326,7 +1326,8 @@ app.post('/api/admin/bulk-delete', requireAdmin, async (req, res) => {
 });
 
 // Provision portal accounts for legacy student/teacher records that predate automatic account creation.
-app.post('/api/users/provision-linked-accounts', requireAdmin, async (_req, res) => {
+app.post('/api/users/provision-linked-accounts', requireAdmin, async (req, res) => {
+  const scope = req.body?.scope === 'siswa' ? 'siswa' : 'semua';
   const db = await getDb();
   const created: { fullName: string; role: 'siswa' | 'guru'; username: string; temporaryPassword: string }[] = [];
   const conflicts: { fullName: string; role: 'siswa' | 'guru'; username: string }[] = [];
@@ -1381,8 +1382,10 @@ app.post('/api/users/provision-linked-accounts', requireAdmin, async (_req, res)
   for (const student of db.students) {
     provision(student, 'siswa', student.nisn, student.email || '', undefined, student.gender);
   }
-  for (const teacher of db.teachers) {
-    provision(teacher, 'guru', teacher.nip, teacher.email || '', teacher.photoUrl);
+  if (scope === 'semua') {
+    for (const teacher of db.teachers) {
+      provision(teacher, 'guru', teacher.nip, teacher.email || '', teacher.photoUrl);
+    }
   }
 
   if (created.length || updatedLinks) await saveDb();

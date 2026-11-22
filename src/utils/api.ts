@@ -288,16 +288,21 @@ export async function permanentlyDeleteTrashItem(id: string): Promise<void> {
 }
 
 export async function permanentlyDeleteSelectedTrashItems(ids: string[]): Promise<{ message: string; removedCount: number }> {
-  return apiRequest('/admin/trash/bulk', {
-    method: 'DELETE',
-    body: JSON.stringify({ ids })
-  });
+  let removedCount = 0;
+  for (let index = 0; index < ids.length; index += 500) {
+    const result = await apiRequest<{ message: string; removedCount: number }>('/admin/trash/bulk', {
+      method: 'DELETE',
+      body: JSON.stringify({ ids: ids.slice(index, index + 500) })
+    });
+    removedCount += result.removedCount;
+  }
+  return { message: `${removedCount} item dihapus permanen dari Tempat Sampah.`, removedCount };
 }
 
-export async function provisionLinkedAccounts(): Promise<ProvisionLinkedAccountsResult> {
+export async function provisionLinkedAccounts(scope: 'semua' | 'siswa' = 'semua'): Promise<ProvisionLinkedAccountsResult> {
   return apiRequest<ProvisionLinkedAccountsResult>('/users/provision-linked-accounts', {
     method: 'POST',
-    body: JSON.stringify({})
+    body: JSON.stringify({ scope })
   });
 }
 
