@@ -24,6 +24,10 @@ import {
   requireAdminOrKombel,
   requireAdminOrTeacher,
   requireStaff,
+  requireMonitoringStaff,
+  requireAdminTeacherOrPrincipalRead,
+  requireRole,
+  rejectPrincipalMutation,
   type AuthenticatedRequest
 } from './server/auth';
 import type {
@@ -729,6 +733,11 @@ app.post('/api/auth/change-password', requireAuth, async (req: AuthenticatedRequ
   if (userIndex < 0) return res.status(404).json({ message: 'Pengguna tidak ditemukan.' });
 
   const user = db.users[userIndex];
+  // Keep the mandatory first-login password change available for newly issued
+  // principal accounts; routine profile and account management stays Admin-only.
+  if (user.role === 'kepala_sekolah' && !user.mustChangePassword) {
+    return res.status(403).json({ message: 'Akun Kepala Sekolah hanya memiliki akses baca.' });
+  }
   if (!verifyPassword(String(oldPassword), user.salt, user.passwordHash)) {
     return res.status(400).json({ message: 'Kata sandi lama tidak sesuai.' });
   }
@@ -2159,7 +2168,7 @@ app.delete('/api/teachers/:id', requireAdmin, async (req, res) => {
 // ----------------------------------------------------
 // 8. STUDENTS (SISWA) CRUD
 // ----------------------------------------------------
-app.get('/api/students', requireStaff, async (_req, res) => {
+app.get('/api/students', requireMonitoringStaff, async (_req, res) => {
   const db = await getDb();
   res.json(db.students);
 });
@@ -2223,7 +2232,7 @@ app.get('/api/schedule-notification-reads', requireAuth, async (req: Authenticat
 });
 
 app.post('/api/schedule-notification-reads', requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (!['siswa', 'guru', 'ketua_kombel', 'kepala_sekolah'].includes(req.user?.role || '')) {
+  if (!['siswa', 'guru', 'ketua_kombel'].includes(req.user?.role || '')) {
     return res.status(403).json({ message: 'Endpoint ini tidak tersedia untuk peran akun ini.' });
   }
   const keys = req.body?.keys;
@@ -2530,7 +2539,7 @@ app.delete('/api/portal-announcements/:id', requireStaff, async (req: Authentica
 // ----------------------------------------------------
 // 10. PPDB (PENERIMAAN SISWA BARU)
 // ----------------------------------------------------
-app.get('/api/ppdb', requireStaff, async (_req, res) => {
+app.get('/api/ppdb', requireMonitoringStaff, async (_req, res) => {
   const db = await getDb();
   res.json(db.ppdb);
 });
@@ -2562,7 +2571,7 @@ app.post('/api/ppdb/status', async (req, res) => {
   });
 });
 
-app.post('/api/ppdb', async (req, res) => {
+app.post('/api/ppdb', rejectPrincipalMutation, async (req, res) => {
   try {
     const body = req.body || {};
     if (!body.fullName || !body.nisn || !body.phone) {
@@ -2672,12 +2681,12 @@ app.put('/api/contact-info', requireAdmin, async (req, res) => {
   res.json(db.contactInfo);
 });
 
-app.get('/api/contact', requireAdmin, async (_req, res) => {
+app.get('/api/contact', requireRole(['admin', 'kepala_sekolah']), async (_req, res) => {
   const db = await getDb();
   res.json(db.messages);
 });
 
-app.post('/api/contact', async (req, res) => {
+app.post('/api/contact', rejectPrincipalMutation, async (req, res) => {
   const { name, email, phone, subject, message } = req.body || {};
   if (!name || !email || !message) {
     return res.status(400).json({ message: 'Nama, email, dan pesan wajib diisi.' });
@@ -2890,7 +2899,7 @@ app.delete('/api/assignments/:id', requireAdminOrTeacher, async (req, res) => {
 });
 
 // Submissions
-app.get('/api/submissions/:id/file', requireAdminOrTeacher, async (req: AuthenticatedRequest, res, next) => {
+app.get('/api/submissions/:id/file', requireAdminTeacherOrPrincipalRead, async (req: AuthenticatedRequest, res, next) => {
   const db = await getDb();
   const submission = db.submissions.find(item => item.id === req.params.id);
   if (!submission || !submission.linkOrContent.startsWith('/uploads/')) {
@@ -2916,6 +2925,9 @@ app.get('/api/submissions/:id/file', requireAdminOrTeacher, async (req: Authenti
 });
 
 app.get('/api/submissions', requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (!['siswa', 'guru', 'ketua_kombel', 'admin', 'kepala_sekolah'].includes(req.user?.role || '')) {
+    return res.status(403).json({ message: 'Anda tidak memiliki hak akses untuk melihat pengumpulan tugas.' });
+  }
   const db = await getDb();
   const assignmentId = req.query.assignmentId ? String(req.query.assignmentId) : undefined;
   const studentId = req.query.studentId ? String(req.query.studentId) : undefined;
@@ -2932,7 +2944,10 @@ app.get('/api/submissions', requireAuth, async (req: AuthenticatedRequest, res) 
   res.json(results);
 });
 
-app.post('/api/submissions', requireAuth, upload.single('file'), async (req: AuthenticatedRequest & { file?: Express.Multer.File }, res) => {
+app.post('/api/submissions', requireRole(['siswa']), upload.single('file'), async (req: AuthenticatedRequest & { file?: Express.Multer.File }, res) => {
+  if (req.user?.role !== 'siswa') {
+    return res.status(403).json({ message: 'Hanya akun siswa yang dapat mengirim pengumpulan tugas.' });
+  }
   const body = req.body || {};
   if (!body.assignmentId) {
     return res.status(400).json({ message: 'Assignment ID wajib diisi.' });

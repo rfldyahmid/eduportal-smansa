@@ -213,6 +213,8 @@ const formatAnnouncementDate = (value: string) => {
 };
 
 export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout }) => {
+  const readOnly = currentUser.role === 'kepala_sekolah';
+  const portalRootRef = useRef<HTMLDivElement>(null);
   type NewAccountCredential = { role: string; fullName: string; username: string; password: string; className?: string };
   const [activeTab, setActiveTab] = useState<AdminTab>('siswa');
   const [newAccountCredentials, setNewAccountCredentials] = useState<NewAccountCredential[]>([]);
@@ -618,6 +620,40 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
   useEffect(() => {
     if (activeTab === 'sampah') loadTrash();
   }, [activeTab]);
+
+  useEffect(() => {
+    if (!readOnly || !portalRootRef.current) return;
+    const root = portalRootRef.current;
+    const writeAction = /\b(tambah|buat|edit|ubah|hapus|impor|unggah|upload|simpan|reset|verifikasi|lulus seleksi|berkas terverifikasi|cadangan|tidak diterima|balas|pulihkan|permanen|sinkronkan akun|kelola akun|kelola pengguna|terbitkan|publikasikan|kirim balasan)\b/i;
+    const hideWriteControls = () => {
+      root.querySelectorAll<HTMLButtonElement>('button').forEach(button => {
+        if (button.closest('aside')) return;
+        const label = `${button.getAttribute('aria-label') || ''} ${button.title} ${button.textContent || ''}`;
+        if (writeAction.test(label)) {
+          button.hidden = true;
+          button.tabIndex = -1;
+          button.setAttribute('aria-hidden', 'true');
+        }
+      });
+      root.querySelectorAll<HTMLFormElement>('form').forEach(form => { form.hidden = true; });
+      root.querySelectorAll<HTMLInputElement>('input[type="file"]').forEach(input => { input.disabled = true; });
+      root.querySelectorAll<HTMLTableElement>('table').forEach(table => {
+        const headers = Array.from(table.querySelectorAll<HTMLTableCellElement>('thead tr:first-child > th'));
+        headers.forEach((header, columnIndex) => {
+          if (/^(aksi|tindakan)$/i.test(header.textContent?.trim() || '')) {
+            header.hidden = true;
+            table.querySelectorAll<HTMLTableRowElement>('tbody tr').forEach(row => {
+              if (row.children[columnIndex]) (row.children[columnIndex] as HTMLElement).hidden = true;
+            });
+          }
+        });
+      });
+    };
+    hideWriteControls();
+    const observer = new MutationObserver(hideWriteControls);
+    observer.observe(root, { childList: true, characterData: true, subtree: true });
+    return () => observer.disconnect();
+  }, [readOnly, activeTab, isMobileNavOpen]);
 
   const handleRestoreTrashItem = async (item: DeletedItemSummary) => {
     if (isTrashActionInProgress || !window.confirm(`Pulihkan “${item.label}” ke data aktif?`)) return;
@@ -2135,6 +2171,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
     ] },
     { id: 'sampah', label: 'Tempat Sampah', icon: Trash2 }
   ];
+  const visibleNavItems = readOnly
+    ? adminNavItems.filter(item => !['pengguna-menu', 'sampah', 'kontak'].includes(item.id))
+    : adminNavItems;
+  const signedInAccount = users.find(user => user.id === currentUser.id);
+  const sidebarUserName = signedInAccount?.fullName?.trim() || currentUser.fullName;
 
   const activeNavId = activeTab === 'internal'
     ? `internal:${internalSubTab}`
@@ -2156,7 +2197,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
   };
 
   return (
-    <div className="mx-auto grid w-full min-w-0 max-w-[1600px] gap-4 px-3 py-4 sm:px-8 sm:py-8 lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-6 lg:py-12">
+    <div ref={portalRootRef} className="grid w-full min-w-0 gap-4 px-3 py-4 sm:px-8 sm:py-8 lg:max-w-none lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-0 lg:px-0 lg:py-0" onClickCapture={event => {
+      if (!readOnly) return;
+      const button = (event.target as HTMLElement).closest('button');
+      if (!button || button.closest('aside')) return;
+      const label = `${button.getAttribute('aria-label') || ''} ${button.title} ${button.textContent || ''}`;
+      if (/\b(tambah|buat|edit|ubah|hapus|impor|unggah|upload|simpan|reset|verifikasi|lulus seleksi|berkas terverifikasi|cadangan|tidak diterima|balas|pulihkan|permanen|sinkronkan akun|kelola akun|kelola pengguna|terbitkan|publikasikan|kirim balasan)\b/i.test(label)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    }} onSubmitCapture={event => { if (readOnly) { event.preventDefault(); event.stopPropagation(); } }}>
       <input
         ref={studentRosterFileInputRef}
         type="file"
@@ -2172,13 +2222,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
         onChange={event => handleRosterFileChange(event, 'teachers')}
       />
       <div className="hidden lg:block">
-        <PortalSidebar title="Dashboard Admin" items={adminNavItems} activeId={activeNavId} onSelect={selectAdminNav} />
+        <PortalSidebar title={readOnly ? 'Kepala Sekolah' : 'Dashboard Admin'} userName={sidebarUserName} items={visibleNavItems} activeId={activeNavId} onSelect={selectAdminNav} />
       </div>
       <div className="min-w-0 lg:hidden">
         <button
           type="button"
           onClick={() => setIsMobileNavOpen(true)}
-          aria-label="Buka menu dashboard admin"
+          aria-label={`Buka menu dashboard ${readOnly ? 'kepala sekolah' : 'admin'}`}
           aria-expanded={isMobileNavOpen}
           className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-700"
         >
@@ -2197,11 +2247,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <PortalSidebar title="Dashboard Admin" items={adminNavItems} activeId={activeNavId} onSelect={selectAdminNav} />
+            <PortalSidebar title={readOnly ? 'Kepala Sekolah' : 'Dashboard Admin'} userName={sidebarUserName} items={visibleNavItems} activeId={activeNavId} onSelect={selectAdminNav} />
           </div>
         </div>
       )}
-      <div className="min-w-0 space-y-6 sm:space-y-8">
+      <div className="min-w-0 space-y-6 sm:space-y-8 lg:px-8 lg:py-8 xl:px-10">
       {/* Admin dashboard overview */}
       <div className="space-y-5">
         <section className="relative isolate overflow-hidden rounded-3xl border border-blue-950 bg-gradient-to-br from-slate-950 via-blue-950 to-blue-900 p-5 text-white shadow-xl sm:p-7 lg:p-8">
@@ -2212,14 +2262,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
               <div>
                 <div className="mb-2 flex flex-wrap items-center gap-2">
                   <span className="rounded-full border border-amber-300/30 bg-amber-300/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-200">
-                    Administrator Sistem & Tata Usaha
+                    {readOnly ? 'Kepala Sekolah · Monitoring Read-only' : 'Administrator Sistem & Tata Usaha'}
                   </span>
                 </div>
                 <h1 className="mt-1 break-words font-serif-title text-2xl font-bold leading-tight text-white sm:text-3xl lg:text-4xl">
-                  Dashboard Admin Sekolah
+                  {readOnly ? 'Dashboard Kepala Sekolah' : 'Dashboard Admin Sekolah'}
                 </h1>
                 <p className="mt-2 max-w-2xl text-xs leading-relaxed text-blue-100/75 sm:text-sm">
-                  Pusat pengelolaan data, layanan, dan informasi SMA Negeri 1 Halmahera Tengah.
+                  {readOnly ? 'Pemantauan data, layanan, dan aktivitas SMA Negeri 1 Halmahera Tengah.' : 'Pusat pengelolaan data, layanan, dan informasi SMA Negeri 1 Halmahera Tengah.'}
                 </p>
               </div>
             </div>
@@ -2237,7 +2287,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
                 <RotateCcw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
                 Muat Ulang
               </button>
-              <button
+              {!readOnly && <button
                 onClick={handleResetSchoolData}
                 disabled={isResettingSchoolData}
                 className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-rose-300/30 bg-rose-500/10 px-3.5 py-2 text-xs font-semibold text-rose-100 transition hover:bg-rose-500/20 disabled:opacity-50 sm:flex-none"
@@ -2245,7 +2295,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
               >
                 <AlertTriangle className={`h-3.5 w-3.5 ${isResettingSchoolData ? 'animate-pulse' : ''}`} />
                 {isResettingSchoolData ? 'Mereset...' : 'Reset Data'}
-              </button>
+              </button>}
               <button
                 type="button"
                 onClick={onLogout}
@@ -2266,7 +2316,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
             { label: 'Pendaftar PPDB', value: applicants.length, unit: 'calon', icon: FileCheck, tone: 'amber' },
             { label: 'Pengumuman', value: announcements.length, unit: 'pos', icon: Bell, tone: 'sky' },
             { label: 'Galeri & Video', value: galleryItems.length + videos.length, unit: 'media', icon: Images, tone: 'violet' },
-            { label: 'Akun Terdaftar', value: users.length, unit: 'akun', icon: Shield, tone: 'teal' }
+            ...(!readOnly ? [{ label: 'Akun Terdaftar', value: users.length, unit: 'akun', icon: Shield, tone: 'teal' }] : [])
           ].map(stat => {
             const Icon = stat.icon;
             const tones: Record<string, string> = {

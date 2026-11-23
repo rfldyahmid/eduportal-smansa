@@ -11,12 +11,13 @@ export interface PortalNavItem {
 
 interface PortalSidebarProps {
   title: string;
+  userName?: string;
   items: PortalNavItem[];
   activeId: string;
   onSelect: (id: string) => void;
 }
 
-export const PortalSidebar: React.FC<PortalSidebarProps> = ({ title, items, activeId, onSelect }) => {
+export const PortalSidebar: React.FC<PortalSidebarProps> = ({ title, userName, items, activeId, onSelect }) => {
   const activeParent = items.find(item => item.children?.some(child => child.id === activeId))?.id;
   const [expanded, setExpanded] = useState<string[]>(activeParent ? [activeParent] : []);
 
@@ -27,15 +28,21 @@ export const PortalSidebar: React.FC<PortalSidebarProps> = ({ title, items, acti
   const toggle = (id: string) => setExpanded(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
 
   return (
-    <aside className="h-fit min-w-0 overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 text-white shadow-xl lg:sticky lg:top-4">
-      <div className="flex items-center gap-3 border-b border-white/10 px-4 py-5">
-        <img src={IMAGES.logoSekolah} alt="" className="h-11 w-11 shrink-0 object-contain" />
-        <div className="min-w-0">
-          <p className="truncate text-xs font-bold tracking-wide text-white">SMA NEGERI 1 HALTENG</p>
-          <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-300">{title}</p>
+    <aside className="flex h-[100dvh] min-h-[100dvh] min-w-0 flex-col overflow-hidden bg-slate-950 text-white shadow-xl lg:sticky lg:top-0">
+      <div className="shrink-0 px-4 pb-4 pt-5">
+        <div className="flex items-center gap-3">
+          <img src={IMAGES.logoSekolah} alt="" className="h-11 w-11 shrink-0 object-contain" />
+          <div className="min-w-0">
+            <p className="truncate text-xs font-bold tracking-wide text-white">SMA NEGERI 1 HALTENG</p>
+            <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-300">{title}</p>
+          </div>
         </div>
+        {userName && <div className="mt-4 flex items-center gap-3 border-y border-white/10 py-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-amber-300/50 bg-amber-300/10 text-sm font-bold text-amber-200">{userName.trim().charAt(0).toUpperCase()}</span>
+          <div className="min-w-0"><p className="truncate text-xs font-semibold text-white">{userName}</p><p className="mt-1 text-[10px] text-slate-400">{title}</p></div>
+        </div>}
       </div>
-      <nav aria-label={`Navigasi ${title}`} className="max-h-64 space-y-1 overflow-y-auto p-3 lg:max-h-[calc(100vh-11rem)]">
+      <nav aria-label={`Navigasi ${title}`} className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-3">
         {items.map(item => {
           const Icon = item.icon;
           const isActive = item.id === activeId || item.children?.some(child => child.id === activeId) || false;
@@ -83,8 +90,8 @@ export const PortalSidebar: React.FC<PortalSidebarProps> = ({ title, items, acti
           );
         })}
       </nav>
-      <div className="border-t border-white/10 px-4 py-3 text-[10px] leading-relaxed text-slate-400">
-        Sistem administrasi sekolah<br />Akses sesuai hak pengguna
+      <div className="mt-auto shrink-0 border-t border-white/10 px-4 py-4 text-[10px] leading-relaxed text-slate-400">
+        Sistem informasi sekolah<br />{title === 'Kepala Sekolah' ? 'Akses pemantauan · hanya melihat' : 'Akses pengelolaan Admin'}
       </div>
     </aside>
   );

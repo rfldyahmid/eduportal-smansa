@@ -106,7 +106,12 @@ export async function requireAuth(req: AuthenticatedRequest, res: Response, next
     if (decoded.credentialVersion !== credentialVersion(account)) {
       return res.status(401).json({ message: 'Kata sandi akun telah berubah. Silakan masuk kembali.' });
     }
-    if (account.mustChangePassword && req.path !== '/api/auth/change-password' && req.path !== '/api/auth/me') {
+    const requestPath = req.originalUrl.split('?')[0].replace(/\/+$/, '');
+    const isPasswordChangeRequest = req.method === 'POST' && (
+      requestPath.endsWith('/api/auth/change-password') || requestPath.endsWith('/auth/change-password')
+    );
+    const isAuthMeRequest = requestPath.endsWith('/api/auth/me') || requestPath.endsWith('/auth/me');
+    if (account.mustChangePassword && !isPasswordChangeRequest && !isAuthMeRequest) {
       return res.status(403).json({
         code: 'PASSWORD_CHANGE_REQUIRED',
         message: 'Ganti kata sandi awal sebelum menggunakan portal.'
@@ -142,4 +147,21 @@ export function requireRole(allowedRoles: UserRole[]) {
 export const requireAdmin = requireRole(['admin']);
 export const requireAdminOrKombel = requireRole(['admin', 'ketua_kombel']);
 export const requireAdminOrTeacher = requireRole(['admin', 'guru']);
-export const requireStaff = requireRole(['admin', 'guru', 'kepala_sekolah', 'ketua_kombel']);
+// Staff mutations intentionally exclude the principal. Use requireMonitoringStaff
+// only on read endpoints that expose school-wide monitoring data.
+export const requireStaff = requireRole(['admin', 'guru', 'ketua_kombel']);
+export const requireMonitoringStaff = requireRole(['admin', 'guru', 'kepala_sekolah', 'ketua_kombel']);
+export const requireAdminTeacherOrPrincipalRead = requireRole(['admin', 'guru', 'kepala_sekolah']);
+
+// Public forms remain available to visitors, while authenticated principals are
+// prevented from using them as a way to mutate portal records.
+export function rejectPrincipalMutation(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  const auth = req.headers.authorization || '';
+  if (!auth.startsWith('Bearer ')) return next();
+  requireAuth(req, res, () => {
+    if (req.user?.role === 'kepala_sekolah') {
+      return res.status(403).json({ message: 'Akun Kepala Sekolah hanya memiliki akses baca.' });
+    }
+    next();
+  });
+}

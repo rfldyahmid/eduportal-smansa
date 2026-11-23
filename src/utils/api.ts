@@ -101,12 +101,19 @@ export async function fetchHomeStats(): Promise<HomeStats> {
 }
 
 export async function apiChangePassword(oldPassword: string, newPassword: string): Promise<{ message: string; token: string; user: UserAccount }> {
-  const result = await apiRequest<{ message: string; token: string; user: UserAccount }>('/auth/change-password', {
-    method: 'POST',
-    body: JSON.stringify({ oldPassword, newPassword })
-  });
-  setAuthToken(result.token);
-  return result;
+  try {
+    const result = await apiRequest<{ message: string; token: string; user: UserAccount }>('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ oldPassword, newPassword })
+    });
+    setAuthToken(result.token);
+    return result;
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Anda tidak memiliki hak akses untuk tindakan ini.') {
+      throw new Error('Server EDUPORTAL masih memakai aturan akses lama untuk ganti kata sandi awal. Kata sandi belum berubah. Minta Admin membangun ulang dan memulai ulang server, lalu coba login kembali.');
+    }
+    throw error;
+  }
 }
 
 export async function apiForgotPassword(usernameOrEmail: string): Promise<{ message: string }> {
