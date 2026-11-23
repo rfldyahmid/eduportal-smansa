@@ -1,5 +1,5 @@
 import type { Express } from 'express';
-import { requireAdmin } from '../auth';
+import { requireAdmin, requireAdminOrKombel, type AuthenticatedRequest } from '../auth';
 import { formatDateLabel } from '../dateLabel';
 import {
   ValidationError,
@@ -18,6 +18,21 @@ interface ImageHelpers {
 
 const isDataUrl = (v: unknown): v is string => typeof v === 'string' && v.startsWith('data:image/');
 
+function normalizeFacebookUrl(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  let url: URL;
+  try {
+    const raw = value.trim();
+    url = new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`);
+  } catch {
+    throw new ValidationError('Tautan Facebook tidak valid.');
+  }
+  if (url.protocol !== 'https:' || !['facebook.com', 'www.facebook.com', 'm.facebook.com', 'web.facebook.com', 'fb.watch'].includes(url.hostname.toLowerCase())) {
+    throw new ValidationError('Gunakan tautan dari facebook.com.');
+  }
+  return url.toString();
+}
+
 function sendError(res: any, err: unknown, fallback: string) {
   if (err instanceof ValidationError) return res.status(400).json({ message: err.message });
   console.error(err);
@@ -33,7 +48,7 @@ export function registerAnnouncementRoutes(app: Express, { persistImage, safeDel
     }
   });
 
-  app.post('/api/announcements', requireAdmin, async (req, res) => {
+  app.post('/api/announcements', requireAdminOrKombel, async (req: AuthenticatedRequest, res) => {
     const persisted: string[] = []; // file baru, dihapus lagi jika penyimpanan DB gagal
     try {
       const body = req.body || {};
@@ -41,12 +56,8 @@ export function registerAnnouncementRoutes(app: Express, { persistImage, safeDel
         return res.status(400).json({ message: 'Judul, kategori, penulis, ringkasan, dan isi wajib diisi.' });
       }
       const inputImages = body.images === undefined ? [] : body.images;
-      if (
-        !Array.isArray(inputImages) ||
-        inputImages.length > 5 ||
-        (inputImages.some(isDataUrl) && (inputImages.length < 3 || inputImages.length > 5))
-      ) {
-        return res.status(400).json({ message: 'Unggahan harus berisi 3 sampai 5 foto.' });
+      if (!Array.isArray(inputImages) || inputImages.length > 5) {
+        return res.status(400).json({ message: 'Foto pengumuman bersifat opsional, maksimal 5 foto.' });
       }
 
       const images: string[] = [];
@@ -76,6 +87,7 @@ export function registerAnnouncementRoutes(app: Express, { persistImage, safeDel
         summary: String(body.summary).trim(),
         content: String(body.content).trim(),
         images: images.length ? images : image ? [image] : [],
+        facebookUrl: normalizeFacebookUrl(body.facebookUrl),
         isImportant: Boolean(body.isImportant),
       });
       res.status(201).json(created);
@@ -85,7 +97,7 @@ export function registerAnnouncementRoutes(app: Express, { persistImage, safeDel
     }
   });
 
-  app.put('/api/announcements/:id', requireAdmin, async (req, res) => {
+  app.put('/api/announcements/:id', requireAdminOrKombel, async (req, res) => {
     const persisted: string[] = [];
     try {
       const id = String(req.params.id);
@@ -97,11 +109,6 @@ export function registerAnnouncementRoutes(app: Express, { persistImage, safeDel
       if (inputImages !== undefined && (!Array.isArray(inputImages) || inputImages.length > 5)) {
         return res.status(400).json({ message: 'Unggahan maksimal 5 foto.' });
       }
-      if (Array.isArray(inputImages) && inputImages.some(isDataUrl) &&
-          (inputImages.length < 3 || inputImages.length > 5)) {
-        return res.status(400).json({ message: 'Unggah minimal 3 dan maksimal 5 foto.' });
-      }
-
       let images: string[];
       if (inputImages === undefined) {
         images = old.images?.length ? old.images : old.image ? [old.image] : [];
@@ -126,7 +133,7 @@ export function registerAnnouncementRoutes(app: Express, { persistImage, safeDel
       }
       const finalImages = images.length ? images : image ? [image] : [];
 
-      const updated = await updateAnnouncement(id, body, finalImages);
+      const updated = await updateAnnouncement(id, { ...body, facebookUrl: normalizeFacebookUrl(body.facebookUrl) ?? (body.facebookUrl === '' ? '' : undefined) }, finalImages);
       if (!updated) return res.status(404).json({ message: 'Pengumuman tidak ditemukan.' });
 
       const retained = new Set(finalImages);
@@ -140,7 +147,7 @@ export function registerAnnouncementRoutes(app: Express, { persistImage, safeDel
     }
   });
 
-  app.delete('/api/announcements/:id', requireAdmin, async (req, res) => {
+  app.delete('/api/announcements/:id', requireAdminOrKombel, async (req, res) => {
     try {
       const id = String(req.params.id);
       const item = await getAnnouncement(id);

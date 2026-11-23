@@ -33,10 +33,20 @@ BEGIN
     DELETE FROM teacher_classes WHERE class_id = old_class.id;
 
     UPDATE teachers SET homeroom_class_id = new_class_id WHERE homeroom_class_id = old_class.id;
-    UPDATE school_classes AS target
-    SET homeroom_teacher_id = COALESCE(target.homeroom_teacher_id, source.homeroom_teacher_id)
-    FROM school_classes AS source
-    WHERE target.id = new_class_id AND source.id = old_class.id;
+    -- Older schemas stored the homeroom teacher on school_classes. Migration 002
+    -- removed that duplicate field; only copy it when upgrading a legacy schema.
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = 'school_classes'
+        AND column_name = 'homeroom_teacher_id'
+    ) THEN
+      EXECUTE 'UPDATE school_classes AS target
+               SET homeroom_teacher_id = COALESCE(target.homeroom_teacher_id, source.homeroom_teacher_id)
+               FROM school_classes AS source
+               WHERE target.id = $1 AND source.id = $2'
+        USING new_class_id, old_class.id;
+    END IF;
 
     DELETE FROM school_classes WHERE id = old_class.id;
   END LOOP;

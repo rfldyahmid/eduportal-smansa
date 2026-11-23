@@ -77,6 +77,10 @@ DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/NAMA_DATABASE
 
 `ADMIN_USERNAME` dan `ADMIN_PASSWORD` bukan pengaturan runtime aplikasi. Sebelum cutover, pastikan akun admin PostgreSQL memakai kata sandi unik dan aman; kata sandi akun yang ditandai untuk diganti akan diwajibkan berubah saat login.
 
+### Tautan unggahan Facebook KOMBEL
+
+Pengelola dapat menambahkan tautan unggahan Facebook pada dokumentasi KOMBEL. Agar tanggalnya terisi otomatis, atur `KOMBEL_FACEBOOK_PAGE_ACCESS_TOKEN` menggunakan Page Access Token untuk Halaman Facebook yang menerbitkan unggahan. Token dan izin akses Graph API yang diperlukan dikelola melalui Meta for Developers; tanpa token tersebut tautan tetap dapat disimpan, tetapi tanggal harus diisi manual.
+
 Saat admin menambahkan siswa atau guru, akun portal dibuat otomatis dengan username NISN/NIP dan kata sandi sementara yang hanya ditampilkan sekali. Email aktif wajib dicatat untuk pemulihan mandiri; siswa dapat memakai email orang tua/wali. Akun dan status kata sandinya tersedia di menu **Kelola Akun & Sandi**. Untuk akun lama, perbarui email melalui edit data siswa/guru agar pemulihan email dapat dipakai.
 
 ### Mengaktifkan balasan email untuk pesan kontak

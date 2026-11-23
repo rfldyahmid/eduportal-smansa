@@ -17,7 +17,9 @@ import {
   ExternalLink,
   Download,
   Paperclip,
-  FileUp
+  FileUp,
+  Camera,
+  Globe2
 } from 'lucide-react';
 import { Teacher, UserAccount, ScheduleItem, Assignment, PortalAnnouncement, AssignmentSubmission } from '../../types';
 import {
@@ -37,13 +39,17 @@ import {
   savePortalAnnouncementApi,
   removePortalAnnouncementApi,
   downloadSubmissionFile,
-  gradeSubmission
+  gradeSubmission,
+  fileToDataUrl,
+  updateMyTeacherPhoto
 } from '../../utils/api';
 import { getProfileAvatar } from '../../utils/profileAvatar';
+import { setActiveSession } from '../../utils/storage';
 import { SCHOOL_CLASSES } from '../../utils/schoolClasses';
 import { TEACHER_SUBJECTS } from '../../utils/teacherSubjects';
 import { PortalAnnouncementAttachments } from './PortalAnnouncementAttachments';
 import { getActiveScheduleNotifications } from '../../utils/activeScheduleNotifications';
+import { KombelWebsiteManager } from './KombelWebsiteManager';
 
 interface TeacherPortalProps {
   currentUser: UserAccount;
@@ -77,7 +83,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
     bio: ''
   };
 
-  const [activeTab, setActiveTab] = useState<'jadwal' | 'tugas' | 'kiriman' | 'pengumuman'>('jadwal');
+  const [activeTab, setActiveTab] = useState<'jadwal' | 'tugas' | 'kiriman' | 'pengumuman' | 'website'>('jadwal');
   const [scheduleDayFilter, setScheduleDayFilter] = useState<ScheduleItem['day'] | 'Semua'>('Semua');
   const [seenScheduleNotificationKeys, setSeenScheduleNotificationKeys] = useState<string[]>([]);
   const [clockNow, setClockNow] = useState(() => new Date());
@@ -87,6 +93,9 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
   const [announcements, setAnnouncements] = useState<PortalAnnouncement[]>([]);
   const [submissionLoadError, setSubmissionLoadError] = useState<string | null>(null);
   const [downloadingSubmissionId, setDownloadingSubmissionId] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const [isSavingProfilePhoto, setIsSavingProfilePhoto] = useState(false);
+  const [profilePhotoMessage, setProfilePhotoMessage] = useState('');
 
   // Inspect Submissions modal / panel
   const [inspectingAssignment, setInspectingAssignment] = useState<Assignment | null>(null);
@@ -140,6 +149,33 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
   const [announcementImageFile, setAnnouncementImageFile] = useState<File | null>(null);
   const [announcementDocumentFile, setAnnouncementDocumentFile] = useState<File | null>(null);
   const isLoadingData = useRef(false);
+
+  const handleProfilePhotoChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setProfilePhotoMessage('Pilih foto JPG, PNG, atau WebP.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setProfilePhotoMessage('Ukuran foto maksimal 5 MB.');
+      return;
+    }
+    setIsSavingProfilePhoto(true);
+    setProfilePhotoMessage('');
+    try {
+      const image = await fileToDataUrl(file);
+      const result = await updateMyTeacherPhoto(image);
+      setTeachers(current => current.map(item => item.id === teacher.id ? { ...item, photoUrl: result.photoUrl } : item));
+      setActiveSession({ ...currentUser, avatarUrl: result.photoUrl });
+      setProfilePhotoMessage('Foto profil berhasil diperbarui.');
+    } catch (error: any) {
+      setProfilePhotoMessage(error?.message || 'Foto profil gagal diperbarui. Silakan coba lagi.');
+    } finally {
+      setIsSavingProfilePhoto(false);
+    }
+  };
 
   useEffect(() => {
     if (editingAssignment) return;
@@ -450,7 +486,8 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
     { id: 'jadwal', label: 'Jadwal Mengajar', icon: CalendarDays },
     { id: 'tugas', label: `Tugas (${myAssignments.length})`, icon: ClipboardList },
     { id: 'kiriman', label: `Kiriman Siswa (${mySubmissions.length})`, icon: FileCheck },
-    { id: 'pengumuman', label: 'Pengumuman Kelas', icon: Megaphone }
+    { id: 'pengumuman', label: 'Pengumuman Kelas', icon: Megaphone },
+    ...(currentUser.role === 'ketua_kombel' ? [{ id: 'website' as const, label: 'Kelola Website', icon: Globe2 }] : [])
   ] as const;
 
   return (
@@ -458,8 +495,16 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
       {/* Header Profile */}
       <div className="flex min-w-0 flex-col gap-5 rounded-2xl bg-slate-900 p-4 text-white shadow-xl sm:p-8 md:flex-row md:items-center md:justify-between">
         <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-white border-2 border-white overflow-hidden flex items-center justify-center font-bold text-amber-300 text-xl">
-            <img src={getProfileAvatar(currentUser)} alt="" className="h-full w-full object-cover" />
+          <input ref={photoInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleProfilePhotoChange} />
+          <div className="flex shrink-0 flex-col items-center gap-1.5">
+            <button type="button" onClick={() => photoInputRef.current?.click()} disabled={isSavingProfilePhoto} aria-label="Ubah foto profil" className="group relative h-16 w-16 overflow-hidden rounded-2xl border-2 border-white bg-white shadow-sm disabled:cursor-wait sm:h-[4.5rem] sm:w-[4.5rem]">
+              <img src={getProfileAvatar(currentUser)} alt="Foto profil guru" className="h-full w-full object-cover" />
+              <span className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 bg-slate-950/60 text-[9px] font-semibold text-white opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
+                <Camera className="h-4 w-4" /> Ubah foto
+              </span>
+              {isSavingProfilePhoto && <span className="absolute inset-0 grid place-items-center bg-slate-950/70 text-[9px] font-semibold text-white">Menyimpan</span>}
+            </button>
+            <span className="text-[10px] font-medium text-blue-100">Ubah foto</span>
           </div>
           <div className="min-w-0">
             <p className="text-xs font-semibold text-amber-300">Selamat datang</p>
@@ -475,6 +520,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
           <span className="break-words font-medium text-white">{teacher.homeroomClass || 'Belum ditetapkan oleh admin'}</span>
         </div>
       </div>
+      {profilePhotoMessage && <p role="status" className={`-mt-3 text-xs ${profilePhotoMessage.includes('berhasil') ? 'text-emerald-700' : 'text-amber-700'}`}>{profilePhotoMessage}</p>}
 
       {/* Special Banner for Ketua KOMBEL */}
       {currentUser.role === 'ketua_kombel' && onNavigate && (
@@ -1124,6 +1170,10 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ currentUser, onNav
             </div>
           </div>
         </section>
+      )}
+
+      {activeTab === 'website' && currentUser.role === 'ketua_kombel' && (
+        <KombelWebsiteManager currentUser={currentUser} />
       )}
     </div>
   );

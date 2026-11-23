@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Announcement } from '../types';
 import { fetchAnnouncements, markStudentNotificationsRead } from '../utils/api';
-import { Calendar, Bell, ChevronLeft, ChevronRight, X, ArrowUpRight, Search, Archive, Image as ImageIcon } from 'lucide-react';
+import { Calendar, Bell, ChevronLeft, ChevronRight, X, ArrowUpRight, Search, Archive, Image as ImageIcon, Facebook, ExternalLink } from 'lucide-react';
 
 interface LatestAnnouncementsProps {
   onNavigate?: (tab: string) => void;
@@ -144,6 +144,13 @@ export const LatestAnnouncements: React.FC<LatestAnnouncementsProps> = ({ onNavi
   const categories = ['Semua', 'Akademik', 'Prestasi', 'PPDB', 'Kegiatan', 'Umum'];
   const getAnnouncementImages = (item: Announcement) =>
     item.images?.length ? item.images : item.image ? [item.image] : [];
+  const getFacebookUrl = (value?: string) => {
+    if (!value) return '';
+    try {
+      const url = new URL(value);
+      return url.protocol === 'https:' && ['facebook.com', 'www.facebook.com', 'm.facebook.com', 'web.facebook.com', 'fb.watch'].includes(url.hostname.toLowerCase()) ? url.toString() : '';
+    } catch { return ''; }
+  };
 
   const filtered = visible.filter(item => {
     const matchCat = showArchive || selectedCategory === 'Semua' || item.category === selectedCategory;
@@ -226,6 +233,11 @@ export const LatestAnnouncements: React.FC<LatestAnnouncementsProps> = ({ onNavi
             <article
               key={item.id}
               onClick={() => {
+                const facebookUrl = getFacebookUrl(item.facebookUrl);
+                if (facebookUrl) {
+                  window.location.assign(facebookUrl);
+                  return;
+                }
                 setActiveAnnouncement(item);
                 markStudentNotificationsRead([`public-announcement:${item.id}`])
                   .then(() => window.dispatchEvent(new Event('server-announcements-read-updated')))
@@ -234,7 +246,13 @@ export const LatestAnnouncements: React.FC<LatestAnnouncementsProps> = ({ onNavi
               className="group cursor-pointer bg-white rounded-xl border border-slate-200 overflow-hidden hover:border-blue-900/40 hover:shadow-md transition-all"
             >
               {images.length > 0 ? (
-                <div className="relative" onClick={event => event.stopPropagation()}>
+                <div className="relative" onClick={event => {
+                  const facebookUrl = getFacebookUrl(item.facebookUrl);
+                  if (facebookUrl) {
+                    event.stopPropagation();
+                    window.location.assign(facebookUrl);
+                  } else event.stopPropagation();
+                }}>
                   <AnnouncementPhotoCarousel images={images} title={item.title} compact />
                   {showArchive && <span className="pointer-events-none absolute top-3 left-3 z-10 flex items-center gap-1 rounded-md bg-slate-900/80 px-2 py-1 text-[10px] font-bold text-white"><Archive className="w-3 h-3" /> Arsip</span>}
                 </div>
@@ -261,7 +279,8 @@ export const LatestAnnouncements: React.FC<LatestAnnouncementsProps> = ({ onNavi
                 <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
                   <span className="text-[11px] truncate max-w-[180px]">{item.author}</span>
                   <span className="inline-flex items-center gap-1 font-semibold text-blue-900 group-hover:translate-x-0.5 transition-transform">
-                    <span>Selengkapnya</span><ArrowUpRight className="w-3.5 h-3.5" />
+                    <span>{getFacebookUrl(item.facebookUrl) ? 'Lihat di Facebook' : 'Selengkapnya'}</span>
+                    {getFacebookUrl(item.facebookUrl) ? <ExternalLink className="w-3.5 h-3.5" /> : <ArrowUpRight className="w-3.5 h-3.5" />}
                   </span>
                 </div>
               </div>
@@ -296,6 +315,8 @@ export const LatestAnnouncements: React.FC<LatestAnnouncementsProps> = ({ onNavi
 
               <p className="font-medium text-slate-900 bg-slate-50 p-4 rounded-xl border border-slate-100">{activeAnnouncement.summary}</p>
               <div className="whitespace-pre-line text-sm text-slate-700 leading-relaxed">{activeAnnouncement.content}</div>
+
+              {getFacebookUrl(activeAnnouncement.facebookUrl) && <a href={getFacebookUrl(activeAnnouncement.facebookUrl)} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-blue-700 px-4 text-sm font-semibold text-white hover:bg-blue-800"><Facebook className="h-4 w-4" /> Buka informasi di Facebook <ExternalLink className="h-4 w-4" /></a>}
 
               <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-xs">
                 <span className="text-slate-400 font-mono">SMA Negeri 1 Halmahera Tengah</span>

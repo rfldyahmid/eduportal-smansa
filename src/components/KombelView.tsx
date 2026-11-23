@@ -17,7 +17,9 @@ import {
   ShieldCheck,
   ChevronRight,
   ChevronLeft,
-  UserCheck
+  ExternalLink,
+  UserCheck,
+  Facebook
 } from 'lucide-react';
 import type { UserAccount, KombelActivity, KombelAgenda, KombelInfo } from '../types';
 import { DEFAULT_KOMBEL_INFO } from '../utils/kombelInfoDefaults';
@@ -32,6 +34,7 @@ import {
   createKombelAgenda,
   updateKombelAgenda,
   removeKombelAgenda,
+  fetchKombelFacebookPostDate,
   fileToDataUrl
 } from '../utils/api';
 
@@ -39,6 +42,44 @@ interface KombelViewProps {
   onNavigate: (tab: string) => void;
   currentUser: UserAccount | null;
 }
+
+const getFacebookUrl = (value?: string) => {
+  if (!value?.trim()) return '';
+  const raw = value.trim();
+  try {
+    const url = new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`);
+    if (!['facebook.com', 'www.facebook.com', 'm.facebook.com', 'web.facebook.com', 'fb.watch'].includes(url.hostname.toLowerCase())) return '';
+    return url.toString();
+  } catch {
+    return '';
+  }
+};
+
+const FacebookPostEmbed: React.FC<{ url: string; title: string; image: string }> = ({ url, title, image }) => {
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" aria-label={`Buka unggahan Facebook: ${title}`} className="group/facebook relative block aspect-[16/9] w-full overflow-hidden bg-slate-900">
+      <img src={image} alt={title} className="h-full w-full object-cover transition-transform duration-500 group-hover/facebook:scale-105" />
+      <span className="absolute inset-0 flex items-center justify-center bg-black/35 text-sm font-semibold text-white transition group-hover/facebook:bg-black/50"><Facebook className="mr-2 h-5 w-5" /> Buka kegiatan di Facebook <ExternalLink className="ml-2 h-4 w-4" /></span>
+    </a>
+  );
+};
+
+const parseActivityTimestamp = (value?: string) => {
+  if (!value) return 0;
+  const direct = new Date(value).getTime();
+  if (Number.isFinite(direct)) return direct;
+  const match = value.match(/^(\d{1,2})\s+([\p{L}]+)\s+(\d{4})$/u);
+  if (!match) return 0;
+  const months = ['januari', 'februari', 'maret', 'april', 'mei', 'juni', 'juli', 'agustus', 'september', 'oktober', 'november', 'desember'];
+  const month = months.indexOf(match[2].toLocaleLowerCase('id-ID'));
+  return month < 0 ? 0 : new Date(Number(match[3]), month, Number(match[1])).getTime();
+};
+
+const sortActivities = (items: KombelActivity[]) => [...items].sort((a, b) => {
+  const aTime = a.facebookUrl ? parseActivityTimestamp(a.facebookPublishedAt || a.date) : parseActivityTimestamp(a.createdAt);
+  const bTime = b.facebookUrl ? parseActivityTimestamp(b.facebookPublishedAt || b.date) : parseActivityTimestamp(b.createdAt);
+  return bTime - aTime;
+});
 
 export const KombelView: React.FC<KombelViewProps> = ({ onNavigate, currentUser }) => {
   const [activities, setActivities] = useState<KombelActivity[]>([]);
@@ -53,9 +94,11 @@ export const KombelView: React.FC<KombelViewProps> = ({ onNavigate, currentUser 
   const [editingAgenda, setEditingAgenda] = useState<KombelAgenda | null>(null);
   const [activityImages, setActivityImages] = useState<string[]>([]);
   const [activityPhotoIndices, setActivityPhotoIndices] = useState<Record<string, number>>({});
+  const [activeActivityPhoto, setActiveActivityPhoto] = useState<{ activity: KombelActivity; index: number } | null>(null);
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
   const [infoForm, setInfoForm] = useState<KombelInfo>(DEFAULT_KOMBEL_INFO);
   const [infoError, setInfoError] = useState('');
+  const [facebookDateMessage, setFacebookDateMessage] = useState('');
 
   // Forms
   const [activityForm, setActivityForm] = useState({
@@ -64,7 +107,9 @@ export const KombelView: React.FC<KombelViewProps> = ({ onNavigate, currentUser 
     image: '',
     description: '',
     speaker: '',
-    attendeesCount: 20
+    attendeesCount: 20,
+    facebookUrl: '',
+    facebookPublishedAt: ''
   });
 
   const [agendaForm, setAgendaForm] = useState({
@@ -87,7 +132,7 @@ export const KombelView: React.FC<KombelViewProps> = ({ onNavigate, currentUser 
         fetchKombelAgendas(),
         fetchKombelInfo()
       ]);
-      setActivities(actData);
+      setActivities(sortActivities(actData));
       setAgendas(agdData);
       setKombelInfo(infoData);
       setStatusMessage(null);
@@ -131,13 +176,16 @@ export const KombelView: React.FC<KombelViewProps> = ({ onNavigate, currentUser 
   const handleOpenAddActivity = () => {
     setEditingActivity(null);
     setActivityImages([]);
+    setFacebookDateMessage('');
     setActivityForm({
       title: '',
       date: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
       image: '',
       description: '',
       speaker: '',
-      attendeesCount: 20
+      attendeesCount: 20,
+      facebookUrl: '',
+      facebookPublishedAt: ''
     });
     setActiveModal('activity');
   };
@@ -145,22 +193,40 @@ export const KombelView: React.FC<KombelViewProps> = ({ onNavigate, currentUser 
   const handleOpenEditActivity = (item: KombelActivity) => {
     setEditingActivity(item);
     setActivityImages([item.image, ...(item.additionalImages || [])].filter(Boolean));
+    setFacebookDateMessage('');
     setActivityForm({
       title: item.title,
       date: item.date,
       image: item.image,
       description: item.description,
       speaker: item.speaker || '',
-      attendeesCount: item.attendeesCount || 20
+      attendeesCount: item.attendeesCount || 20,
+      facebookUrl: item.facebookUrl || '',
+      facebookPublishedAt: item.facebookPublishedAt || ''
     });
     setActiveModal('activity');
   };
 
+  const syncActivityDateFromFacebook = async () => {
+    const url = getFacebookUrl(activityForm.facebookUrl);
+    if (!url) return;
+    setActivityForm(current => ({ ...current, facebookUrl: url }));
+    setFacebookDateMessage('Memeriksa tanggal unggahan Facebook…');
+    try {
+      const result = await fetchKombelFacebookPostDate(url);
+      setActivityForm(current => ({ ...current, date: result.date, image: result.thumbnailUrl || current.image, facebookPublishedAt: result.publishedAt }));
+      if (result.thumbnailUrl) setActivityImages([result.thumbnailUrl]);
+      setFacebookDateMessage(`Tanggal unggahan disesuaikan: ${result.date}`);
+    } catch (err: any) {
+      setFacebookDateMessage(err?.message || 'Tanggal unggahan Facebook gagal dibaca.');
+    }
+  };
+
   const handleSaveActivity = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activityForm.title || !activityForm.description) return;
-    if ((!editingActivity && (activityImages.length < 3 || activityImages.length > 5)) ||
-        (editingActivity && (activityImages.length < 1 || activityImages.length > 5))) {
+    if (!activityForm.title || (!activityForm.facebookUrl && !activityForm.description)) return;
+    if (!activityForm.facebookUrl && ((!editingActivity && (activityImages.length < 3 || activityImages.length > 5)) ||
+        (editingActivity && (activityImages.length < 1 || activityImages.length > 5)))) {
       setStatusMessage({
         type: 'error',
         text: editingActivity
@@ -172,21 +238,40 @@ export const KombelView: React.FC<KombelViewProps> = ({ onNavigate, currentUser 
     setIsSubmitting(true);
     setStatusMessage(null);
     try {
+      let submittedActivity = { ...activityForm, facebookUrl: getFacebookUrl(activityForm.facebookUrl) };
+      if (submittedActivity.facebookUrl) {
+        try {
+          const facebookData = await fetchKombelFacebookPostDate(submittedActivity.facebookUrl);
+          submittedActivity = {
+            ...submittedActivity,
+            date: facebookData.date,
+            image: facebookData.thumbnailUrl || activityForm.image,
+            facebookPublishedAt: facebookData.publishedAt
+          };
+          setActivityForm(submittedActivity);
+          if (facebookData.thumbnailUrl) setActivityImages([facebookData.thumbnailUrl]);
+          setFacebookDateMessage(facebookData.thumbnailUrl
+            ? `Tanggal dan thumbnail disesuaikan dari Facebook: ${facebookData.date}`
+            : `Tanggal disesuaikan: ${facebookData.date}. Facebook tidak menyediakan thumbnail untuk unggahan ini.`);
+        } catch (err: any) {
+          setFacebookDateMessage(err?.message || 'Tanggal Facebook tidak dapat dibaca; data yang diisi tetap disimpan.');
+        }
+      }
       if (editingActivity) {
         const updated = await updateKombelActivity({
           ...editingActivity,
-          ...activityForm,
-          image: activityImages[0],
+          ...submittedActivity,
+          image: submittedActivity.image || activityImages[0] || 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&q=80&w=800',
           additionalImages: activityImages.slice(1)
         });
-        setActivities(prev => prev.map(a => a.id === updated.id ? updated : a));
+        setActivities(prev => sortActivities(prev.map(a => a.id === updated.id ? updated : a)));
       } else {
         const created = await createKombelActivity({
-          ...activityForm,
-          image: activityImages[0],
+          ...submittedActivity,
+          image: submittedActivity.image || activityImages[0] || 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&q=80&w=800',
           additionalImages: activityImages.slice(1)
         });
-        setActivities(prev => [created, ...prev]);
+      setActivities(prev => sortActivities([created, ...prev]));
       }
       setActiveModal('none');
       setActivityImages([]);
@@ -305,7 +390,10 @@ export const KombelView: React.FC<KombelViewProps> = ({ onNavigate, currentUser 
     const index = Math.min(activityPhotoIndices[activity.id] || 0, images.length - 1);
     return (
       <div className="relative aspect-[16/9] overflow-hidden bg-slate-900">
-        <img src={images[index] || activity.image} alt={activity.title} className="h-full w-full object-cover" />
+        <button type="button" onClick={() => setActiveActivityPhoto({ activity, index })} className="group/photo absolute inset-0 h-full w-full cursor-zoom-in" aria-label={`Lihat foto kegiatan ${activity.title}`}>
+          <img src={images[index] || activity.image} alt={activity.title} className="h-full w-full object-cover transition-transform group-hover/photo:scale-105" />
+          <span className="absolute inset-0 flex items-center justify-center bg-black/0 text-white opacity-0 transition group-hover/photo:bg-black/25 group-hover/photo:opacity-100">Lihat detail foto</span>
+        </button>
         {images.length > 1 && (
           <>
             <button
@@ -333,11 +421,51 @@ export const KombelView: React.FC<KombelViewProps> = ({ onNavigate, currentUser 
     );
   };
 
+  useEffect(() => {
+    if (!activeActivityPhoto) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setActiveActivityPhoto(null);
+      if (event.key === 'ArrowRight') setActiveActivityPhoto(current => current ? { ...current, index: (current.index + 1) % (1 + (current.activity.additionalImages?.length || 0)) } : null);
+      if (event.key === 'ArrowLeft') setActiveActivityPhoto(current => current ? { ...current, index: (current.index - 1 + 1 + (current.activity.additionalImages?.length || 0)) % (1 + (current.activity.additionalImages?.length || 0)) } : null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeActivityPhoto]);
+
+  const facebookLink = (url?: string, compact = false) => {
+    const href = getFacebookUrl(url);
+    if (!href) return null;
+    return <a href={href} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-xs font-semibold text-blue-700 hover:underline" onClick={event => event.stopPropagation()}>
+      <Facebook className={compact ? 'h-3.5 w-3.5' : 'h-4 w-4'} /> Lihat unggahan Facebook <ExternalLink className="h-3 w-3" />
+    </a>;
+  };
+
   const latestActivity = activities[0];
   const otherActivities = activities.slice(1);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-8 py-10 lg:py-16 space-y-12">
+    <div className="max-w-7xl mx-auto px-4 sm:px-8 py-7 sm:py-10 lg:py-16 space-y-8 sm:space-y-12">
+      {activeActivityPhoto && (() => {
+        const images = [activeActivityPhoto.activity.image, ...(activeActivityPhoto.activity.additionalImages || [])].filter(Boolean);
+        const index = activeActivityPhoto.index % images.length;
+        return (
+          <div role="dialog" aria-modal="true" aria-label={`Detail foto ${activeActivityPhoto.activity.title}`} className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm" onClick={() => setActiveActivityPhoto(null)}>
+            <div className="relative flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl" onClick={event => event.stopPropagation()}>
+              <button type="button" aria-label="Tutup detail foto" onClick={() => setActiveActivityPhoto(null)} className="absolute right-3 top-3 z-10 rounded-full bg-black/60 p-2 text-white hover:bg-black/80"><X className="h-5 w-5" /></button>
+              <div className="relative flex min-h-0 flex-1 items-center justify-center bg-slate-950">
+                <img src={images[index]} alt={`${activeActivityPhoto.activity.title} — foto ${index + 1}`} className="max-h-[68vh] w-full object-contain" />
+                {images.length > 1 && <>
+                  <button type="button" aria-label="Foto sebelumnya" onClick={() => setActiveActivityPhoto(current => current ? { ...current, index: (current.index - 1 + images.length) % images.length } : null)} className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white hover:bg-black/80"><ChevronLeft className="h-6 w-6" /></button>
+                  <button type="button" aria-label="Foto berikutnya" onClick={() => setActiveActivityPhoto(current => current ? { ...current, index: (current.index + 1) % images.length } : null)} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white hover:bg-black/80"><ChevronRight className="h-6 w-6" /></button>
+                  <span className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-3 py-1 text-xs text-white">{index + 1} / {images.length}</span>
+                </>}
+              </div>
+              {images.length > 1 && <div className="flex gap-2 overflow-x-auto border-b bg-slate-100 p-3">{images.map((src, photoIndex) => <button type="button" key={`${src}-${photoIndex}`} onClick={() => setActiveActivityPhoto(current => current ? { ...current, index: photoIndex } : null)} className={`h-12 w-16 shrink-0 overflow-hidden rounded border-2 ${photoIndex === index ? 'border-blue-900' : 'border-transparent opacity-70'}`}><img src={src} alt={`Foto ${photoIndex + 1}`} className="h-full w-full object-cover" /></button>)}</div>}
+              <div className="space-y-2 p-5"><h3 className="font-serif-title text-lg font-bold text-slate-900">{activeActivityPhoto.activity.title}</h3><p className="whitespace-pre-line text-sm leading-relaxed text-slate-600">{activeActivityPhoto.activity.description}</p></div>
+            </div>
+          </div>
+        );
+      })()}
       {/* Breadcrumb & Hero Header */}
       <div className="border-b border-slate-200 pb-6 space-y-2">
         <div className="flex items-center gap-2 text-xs font-semibold text-blue-900 uppercase tracking-widest">
@@ -347,7 +475,7 @@ export const KombelView: React.FC<KombelViewProps> = ({ onNavigate, currentUser 
         </div>
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="font-serif-title text-3xl sm:text-4xl font-bold text-slate-900">
+            <h1 className="font-serif-title text-2xl min-[400px]:text-3xl sm:text-4xl font-bold text-slate-900">
               KOMBEL — Komunitas Belajar Guru
             </h1>
             <p className="text-sm text-slate-600 mt-1 max-w-2xl">
@@ -484,11 +612,15 @@ export const KombelView: React.FC<KombelViewProps> = ({ onNavigate, currentUser 
           ) : latestActivity ? (
             <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
               <div className="relative">
-                {renderActivityCarousel(latestActivity)}
-                <div className="absolute top-3 left-3 px-3 py-1 bg-blue-900/90 text-white rounded-full text-xs font-semibold backdrop-blur-sm flex items-center gap-1.5">
-                  <Calendar className="w-3 h-3 text-amber-300" />
-                  <span>{latestActivity.date}</span>
-                </div>
+                {latestActivity.facebookUrl
+                  ? <FacebookPostEmbed url={getFacebookUrl(latestActivity.facebookUrl) || latestActivity.facebookUrl} title={latestActivity.title} image={latestActivity.image} />
+                  : renderActivityCarousel(latestActivity)}
+                {!latestActivity.facebookUrl && (
+                  <div className="absolute top-3 left-3 px-3 py-1 bg-blue-900/90 text-white rounded-full text-xs font-semibold backdrop-blur-sm flex items-center gap-1.5">
+                    <Calendar className="w-3 h-3 text-amber-300" />
+                    <span>{latestActivity.date}</span>
+                  </div>
+                )}
               </div>
               <div className="p-6 space-y-3">
                 <h3 className="font-serif-title text-xl font-bold text-slate-900 leading-tight">
@@ -503,6 +635,7 @@ export const KombelView: React.FC<KombelViewProps> = ({ onNavigate, currentUser 
                 <p className="text-xs sm:text-sm text-slate-600 leading-relaxed whitespace-pre-line">
                   {latestActivity.description}
                 </p>
+                {latestActivity.facebookUrl && facebookLink(latestActivity.facebookUrl)}
               </div>
             </div>
           ) : (
@@ -580,10 +713,14 @@ export const KombelView: React.FC<KombelViewProps> = ({ onNavigate, currentUser 
               <div key={item.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
                 <div>
                   <div className="relative">
-                    {renderActivityCarousel(item)}
-                    <span className="absolute top-2 left-2 px-2 py-0.5 bg-black/70 text-white rounded text-[11px] font-mono">
-                      {item.date}
-                    </span>
+                    {item.facebookUrl
+                      ? <FacebookPostEmbed url={getFacebookUrl(item.facebookUrl) || item.facebookUrl} title={item.title} image={item.image} />
+                      : renderActivityCarousel(item)}
+                    {!item.facebookUrl && (
+                      <span className="absolute top-2 left-2 px-2 py-0.5 bg-black/70 text-white rounded text-[11px] font-mono">
+                        {item.date}
+                      </span>
+                    )}
                   </div>
                   <div className="p-5 space-y-2">
                     <h4 className="font-bold text-slate-900 text-sm leading-snug">{item.title}</h4>
@@ -591,6 +728,7 @@ export const KombelView: React.FC<KombelViewProps> = ({ onNavigate, currentUser 
                       <p className="text-[11px] text-blue-900 font-semibold">{item.speaker}</p>
                     )}
                     <p className="text-xs text-slate-600 line-clamp-3 leading-relaxed">{item.description}</p>
+                    {item.facebookUrl && facebookLink(item.facebookUrl, true)}
                   </div>
                 </div>
 
@@ -731,6 +869,20 @@ export const KombelView: React.FC<KombelViewProps> = ({ onNavigate, currentUser 
               </div>
 
               <div className="space-y-1">
+                <label className="font-semibold text-slate-700">Tautan unggahan Facebook (opsional)</label>
+                <input
+                  type="text"
+                  inputMode="url"
+                  placeholder="https://www.facebook.com/..."
+                  value={activityForm.facebookUrl}
+                  onChange={e => setActivityForm({ ...activityForm, facebookUrl: e.target.value })}
+                  onBlur={syncActivityDateFromFacebook}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-900 focus:outline-none"
+                />
+                <p className="text-[11px] text-slate-500">{facebookDateMessage || 'Tanggal kegiatan mengikuti tanggal unggahan jika Facebook dapat mengakses unggahan tersebut.'}</p>
+              </div>
+
+              <div className="space-y-1">
                 <label className="font-semibold text-slate-700">
                   {editingActivity ? 'Kelola Foto Dokumentasi (1–5 foto)' : 'Unggah 3–5 Foto Kegiatan'}
                 </label>
@@ -742,7 +894,9 @@ export const KombelView: React.FC<KombelViewProps> = ({ onNavigate, currentUser 
                   className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-900 hover:file:bg-blue-100"
                 />
                 <p className="text-[11px] text-slate-500">
-                  {editingActivity
+                  {activityForm.facebookUrl
+                    ? 'Foto dokumentasi opsional karena tautan Facebook sudah ditambahkan.'
+                    : editingActivity
                     ? 'Hapus foto dengan tombol × pada pratinjau, lalu unggah foto pengganti. Maksimal 5 foto.'
                     : 'Pilih 3 sampai 5 foto. Ukuran total maksimal 8 MB.'}
                 </p>
@@ -771,10 +925,10 @@ export const KombelView: React.FC<KombelViewProps> = ({ onNavigate, currentUser 
               </div>
 
               <div className="space-y-1">
-                <label className="font-semibold text-slate-700">Ringkasan / Notulensi Kegiatan *</label>
+                <label className="font-semibold text-slate-700">Ringkasan / Notulensi Kegiatan {!activityForm.facebookUrl && '*'}</label>
                 <textarea
                   rows={4}
-                  required
+                  required={!activityForm.facebookUrl}
                   placeholder="Jelaskan ringkasan bahasan, hasil diskusi, dan praktik baik yang disepakati..."
                   value={activityForm.description}
                   onChange={e => setActivityForm({ ...activityForm, description: e.target.value })}

@@ -24,37 +24,37 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenPortal }) => {
             </h4>
             <ul className="grid grid-cols-1 gap-x-4 gap-y-2 text-xs text-slate-400 min-[400px]:grid-cols-2 sm:grid-cols-1 lg:grid-cols-1">
               <li>
-                <button onClick={() => onNavigate('beranda')} className="min-h-6 text-left hover:text-white transition-colors">
+                <button onClick={() => onNavigate('beranda')} className="min-h-10 text-left hover:text-white transition-colors">
                   Beranda Utama
                 </button>
               </li>
               <li>
-                <button onClick={() => onNavigate('visimisi')} className="min-h-6 text-left hover:text-white transition-colors">
+                <button onClick={() => onNavigate('visimisi')} className="min-h-10 text-left hover:text-white transition-colors">
                   Visi & Misi Sekolah
                 </button>
               </li>
               <li>
-                <button onClick={() => onNavigate('sambutan')} className="min-h-6 text-left hover:text-white transition-colors">
+                <button onClick={() => onNavigate('sambutan')} className="min-h-10 text-left hover:text-white transition-colors">
                   Sambutan Kepala Sekolah
                 </button>
               </li>
               <li>
-                <button onClick={() => onNavigate('guru')} className="min-h-6 text-left hover:text-white transition-colors">
+                <button onClick={() => onNavigate('guru')} className="min-h-10 text-left hover:text-white transition-colors">
                   Direktori Guru & Staf
                 </button>
               </li>
               <li>
-                <button onClick={() => onNavigate('kombel')} className="min-h-6 text-left hover:text-white transition-colors">
+                <button onClick={() => onNavigate('kombel')} className="min-h-10 text-left hover:text-white transition-colors">
                   KOMBEL Guru
                 </button>
               </li>
               <li>
-                <button onClick={() => onNavigate('galeri')} className="min-h-6 text-left hover:text-white transition-colors">
+                <button onClick={() => onNavigate('galeri')} className="min-h-10 text-left hover:text-white transition-colors">
                   Galeri & Ekstrakurikuler
                 </button>
               </li>
               <li>
-                <button onClick={() => onNavigate('kontak')} className="min-h-6 text-left hover:text-white transition-colors">
+                <button onClick={() => onNavigate('kontak')} className="min-h-10 text-left hover:text-white transition-colors">
                   Pusat Layanan & Aduan
                 </button>
               </li>
@@ -68,27 +68,27 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenPortal }) => {
             </h4>
             <ul className="grid grid-cols-1 gap-x-4 gap-y-2 text-xs text-slate-400 min-[400px]:grid-cols-2 sm:grid-cols-1 lg:grid-cols-1">
               <li>
-                <button onClick={() => onNavigate('ppdb')} className="min-h-6 text-left hover:text-white transition-colors">
+                <button onClick={() => onNavigate('ppdb')} className="min-h-10 text-left hover:text-white transition-colors">
                   Informasi PPDB {academicYear}
                 </button>
               </li>
               <li>
-                <button onClick={() => onNavigate('ppdb')} className="min-h-6 text-left hover:text-white transition-colors">
+                <button onClick={() => onNavigate('ppdb')} className="min-h-10 text-left hover:text-white transition-colors">
                   Formulir Pendaftaran Online
                 </button>
               </li>
               <li>
-                <button onClick={() => onNavigate('ppdb')} className="min-h-6 text-left hover:text-white transition-colors">
+                <button onClick={() => onNavigate('ppdb')} className="min-h-10 text-left hover:text-white transition-colors">
                   Cek Status Seleksi Berkas
                 </button>
               </li>
               <li>
-                <button onClick={onOpenPortal} className="min-h-6 text-left font-medium text-amber-400 hover:text-amber-300 transition-colors">
+                <button onClick={onOpenPortal} className="min-h-10 text-left font-medium text-amber-400 hover:text-amber-300 transition-colors">
                   Portal Jadwal & Tugas Siswa
                 </button>
               </li>
               <li>
-                <button onClick={onOpenPortal} className="min-h-6 text-left hover:text-white transition-colors">
+                <button onClick={onOpenPortal} className="min-h-10 text-left hover:text-white transition-colors">
                   Portal Guru & Penugasan
                 </button>
               </li>

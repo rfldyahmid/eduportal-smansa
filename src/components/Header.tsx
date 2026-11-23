@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserAccount } from '../types';
 import { fetchAnnouncements, fetchStudentNotificationReads } from '../utils/api';
-import { Menu, X, User, LogOut, ChevronRight, Bell, LayoutDashboard, Moon, Sun } from 'lucide-react';
+import { Menu, X, User, LogOut, ChevronRight, LayoutDashboard, Moon, Sun } from 'lucide-react';
 import { IMAGES } from '../assets/images';
 
 interface HeaderProps {
@@ -28,23 +28,6 @@ export const Header: React.FC<HeaderProps> = ({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [unreadAnnouncements, setUnreadAnnouncements] = useState<number>(0);
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const upperAreaRef = useRef<HTMLDivElement>(null);
-  const headerRef = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    const header = headerRef.current;
-    const upperArea = upperAreaRef.current;
-    if (!header || !upperArea) return;
-
-    const updateUpperHeight = () => {
-      header.style.setProperty('--header-upper-height', `${upperArea.offsetHeight}px`);
-    };
-
-    updateUpperHeight();
-    const resizeObserver = new ResizeObserver(updateUpperHeight);
-    resizeObserver.observe(upperArea);
-    return () => resizeObserver.disconnect();
-  }, []);
 
   useEffect(() => {
     const desktopViewport = window.matchMedia('(min-width: 1280px)');
@@ -52,18 +35,40 @@ export const Header: React.FC<HeaderProps> = ({
     let activeScrollDirection: 'up' | 'down' | null = null;
     let directionalScrollDistance = 0;
     let animationFrame = 0;
+    let transitionTimer: number | undefined;
+    let settlingLayout = false;
+
+    const changeCollapsedState = (collapsed: boolean) => {
+      setIsCollapsed(previous => {
+        if (previous === collapsed) return previous;
+        settlingLayout = true;
+        if (transitionTimer !== undefined) window.clearTimeout(transitionTimer);
+        transitionTimer = window.setTimeout(() => {
+          lastScrollY = window.scrollY;
+          activeScrollDirection = null;
+          directionalScrollDistance = 0;
+          settlingLayout = false;
+        }, 320);
+        return collapsed;
+      });
+    };
 
     const updateHeaderOnScroll = () => {
       animationFrame = 0;
       const currentScrollY = window.scrollY;
       const scrollDelta = currentScrollY - lastScrollY;
 
+      if (settlingLayout) {
+        lastScrollY = currentScrollY;
+        return;
+      }
+
       if (!desktopViewport.matches || currentScrollY <= 8) {
-        setIsCollapsed(false);
+        changeCollapsedState(false);
         activeScrollDirection = null;
         directionalScrollDistance = 0;
       } else if (mobileMenuOpen) {
-        setIsCollapsed(false);
+        changeCollapsedState(false);
         activeScrollDirection = null;
         directionalScrollDistance = 0;
       } else if (scrollDelta !== 0) {
@@ -75,10 +80,10 @@ export const Header: React.FC<HeaderProps> = ({
         directionalScrollDistance += Math.abs(scrollDelta);
 
         if (nextDirection === 'down' && directionalScrollDistance >= 56 && currentScrollY > 120) {
-          setIsCollapsed(true);
+          changeCollapsedState(true);
           directionalScrollDistance = 0;
         } else if (nextDirection === 'up' && directionalScrollDistance >= 48) {
-          setIsCollapsed(false);
+          changeCollapsedState(false);
           directionalScrollDistance = 0;
         }
       }
@@ -94,7 +99,7 @@ export const Header: React.FC<HeaderProps> = ({
 
     const handleViewportResize = () => {
       if (!desktopViewport.matches) {
-        setIsCollapsed(false);
+        changeCollapsedState(false);
         activeScrollDirection = null;
         directionalScrollDistance = 0;
         lastScrollY = window.scrollY;
@@ -108,7 +113,17 @@ export const Header: React.FC<HeaderProps> = ({
       window.removeEventListener('scroll', handleScroll);
       window.removeEventListener('resize', handleViewportResize);
       if (animationFrame) window.cancelAnimationFrame(animationFrame);
+      if (transitionTimer !== undefined) window.clearTimeout(transitionTimer);
     };
+  }, [mobileMenuOpen]);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobileMenuOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
   }, [mobileMenuOpen]);
 
   useEffect(() => {
@@ -161,11 +176,10 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header
-      ref={headerRef}
       className={`school-header${isCollapsed ? ' header-collapsed' : ''}`}
     >
       <div className="school-header__upper">
-        <div ref={upperAreaRef} className="border-b border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <div className="border-b border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900">
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-3 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-6">
             <button
               onClick={() => handleNavClick('beranda')}

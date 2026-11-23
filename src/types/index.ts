@@ -130,8 +130,26 @@ export interface Announcement {
   content: string;
   image?: string;
   images?: string[];
+  facebookUrl?: string;
   isImportant?: boolean;
   createdAt?: string;
+}
+
+export interface PpdbWebsiteInfo {
+  introduction: string;
+  paths: Array<{
+    label: string;
+    title: string;
+    quota: string;
+    description: string;
+    requirement: string;
+  }>;
+  stages: Array<{
+    label: string;
+    title: string;
+    date: string;
+    description: string;
+  }>;
 }
 
 export interface PortalAnnouncement {
@@ -228,6 +246,8 @@ export interface KombelActivity {
   description: string;
   speaker?: string;
   attendeesCount?: number;
+  facebookUrl?: string;
+  facebookPublishedAt?: string;
   createdAt: string;
 }
 

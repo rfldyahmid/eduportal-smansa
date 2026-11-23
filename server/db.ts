@@ -13,6 +13,7 @@ import type {
   KombelActivity,
   KombelAgenda,
   KombelInfo,
+  PpdbWebsiteInfo,
   Assignment,
   AssignmentSubmission,
   PortalAnnouncement,
@@ -20,6 +21,7 @@ import type {
 } from '../src/types/index';
 import { DEFAULT_CONTACT_INFO } from '../src/utils/contactInfoDefaults';
 import { DEFAULT_KOMBEL_INFO } from '../src/utils/kombelInfoDefaults';
+import { DEFAULT_PPDB_WEBSITE_INFO } from '../src/utils/ppdbInfoDefaults';
 import { listAnnouncements } from './repositories/announcements';
 import { pool } from './pg';
 import { normalizeSchoolClassId } from '../src/utils/schoolClasses';
@@ -31,6 +33,7 @@ export interface DatabaseSchema {
   teachers: Teacher[];
   schedules: ScheduleItem[];
   ppdb: PPDBApplicant[];
+  ppdbWebsiteInfo: PpdbWebsiteInfo;
   messages: ContactMessage[];
   contactInfo: ContactInfo;
   announcements: Announcement[];
@@ -116,6 +119,7 @@ export async function resetSchoolData(): Promise<{ removedUsers: number; removed
         teachers: [],
         schedules: [],
         ppdb: [],
+        ppdbWebsiteInfo: DEFAULT_PPDB_WEBSITE_INFO,
         messages: [],
         contactInfo: {
           address: '', phone: '', whatsapp: '', publicEmail: '', ppdbEmail: '',
@@ -207,6 +211,12 @@ export function ensureDefaults(data: Partial<DatabaseSchema>): DatabaseSchema {
       classId: normalizeSchoolClassId(item.classId)
     })),
     ppdb: Array.isArray(data.ppdb) ? data.ppdb : [],
+    ppdbWebsiteInfo: {
+      ...DEFAULT_PPDB_WEBSITE_INFO,
+      ...(data.ppdbWebsiteInfo || {}),
+      paths: Array.isArray(data.ppdbWebsiteInfo?.paths) ? data.ppdbWebsiteInfo.paths : DEFAULT_PPDB_WEBSITE_INFO.paths,
+      stages: Array.isArray(data.ppdbWebsiteInfo?.stages) ? data.ppdbWebsiteInfo.stages : DEFAULT_PPDB_WEBSITE_INFO.stages
+    },
     messages: Array.isArray(data.messages) ? data.messages : [],
     contactInfo: { ...DEFAULT_CONTACT_INFO, ...(data.contactInfo || {}) },
     announcements: Array.isArray(data.announcements) ? data.announcements : [],

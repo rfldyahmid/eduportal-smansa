@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { PPDBApplicant, PPDBStatusResult } from '../types';
-import { createPPDBApplicant, searchPPDBApplicant } from '../utils/api';
+import { createPPDBApplicant, searchPPDBApplicant, fetchPpdbWebsiteInfo } from '../utils/api';
+import type { PpdbWebsiteInfo } from '../types';
+import { DEFAULT_PPDB_WEBSITE_INFO } from '../utils/ppdbInfoDefaults';
 import { getCurrentAcademicYear, getCurrentAcademicYearStart } from '../utils/academicYear';
 import {
   FileText,
@@ -25,6 +27,11 @@ export const PPDBView: React.FC<PPDBViewProps> = ({ onNavigate }) => {
   const [activeTab, setActiveTab] = useState<'info' | 'daftar' | 'status'>('info');
   const academicYear = getCurrentAcademicYear();
   const academicYearStart = getCurrentAcademicYearStart();
+  const [ppdbInfo, setPpdbInfo] = useState<PpdbWebsiteInfo>(DEFAULT_PPDB_WEBSITE_INFO);
+
+  useEffect(() => {
+    fetchPpdbWebsiteInfo().then(setPpdbInfo).catch(() => undefined);
+  }, []);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -103,7 +110,7 @@ export const PPDBView: React.FC<PPDBViewProps> = ({ onNavigate }) => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-8 py-10 lg:py-16 space-y-12">
+    <div className="max-w-7xl mx-auto px-4 sm:px-8 py-7 sm:py-10 lg:py-16 space-y-8 sm:space-y-12">
       {/* Header */}
       <div className="border-b border-slate-200 pb-6 space-y-2">
         <div className="flex items-center gap-2 text-xs font-semibold text-blue-900 uppercase tracking-widest">
@@ -113,17 +120,17 @@ export const PPDBView: React.FC<PPDBViewProps> = ({ onNavigate }) => {
         </div>
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="font-serif-title text-3xl sm:text-4xl font-bold text-slate-900">
+            <h1 className="font-serif-title text-2xl min-[400px]:text-3xl sm:text-4xl font-bold text-slate-900">
               Penerimaan Peserta Didik Baru (PPDB) {academicYear}
             </h1>
             <p className="text-sm text-slate-500 max-w-2xl mt-1">
-              Sistem pendaftaran daring transparan, akuntabel, dan terintegrasi untuk jenjang SMA Negeri 1 Halmahera Tengah.
+              {ppdbInfo.introduction}
             </p>
           </div>
-          <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl self-start md:self-auto">
+        <div className="flex max-w-full items-center gap-2 overflow-x-auto bg-slate-100 p-1 rounded-xl self-start md:self-auto">
             <button
               onClick={() => setActiveTab('info')}
-              className={`px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+              className={`shrink-0 whitespace-nowrap px-3.5 py-2.5 text-xs font-medium rounded-lg transition-colors ${
                 activeTab === 'info' ? 'bg-white text-slate-900 shadow-sm font-semibold' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
@@ -131,7 +138,7 @@ export const PPDBView: React.FC<PPDBViewProps> = ({ onNavigate }) => {
             </button>
             <button
               onClick={() => setActiveTab('daftar')}
-              className={`px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+              className={`shrink-0 whitespace-nowrap px-3.5 py-2.5 text-xs font-medium rounded-lg transition-colors ${
                 activeTab === 'daftar' ? 'bg-white text-blue-900 shadow-sm font-semibold' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
@@ -139,7 +146,7 @@ export const PPDBView: React.FC<PPDBViewProps> = ({ onNavigate }) => {
             </button>
             <button
               onClick={() => setActiveTab('status')}
-              className={`px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+              className={`shrink-0 whitespace-nowrap px-3.5 py-2.5 text-xs font-medium rounded-lg transition-colors ${
                 activeTab === 'status' ? 'bg-white text-blue-900 shadow-sm font-semibold' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
@@ -158,69 +165,24 @@ export const PPDBView: React.FC<PPDBViewProps> = ({ onNavigate }) => {
               Pilihan Jalur Penerimaan
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <div className="bg-white p-6 rounded-xl border border-slate-200 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-blue-900 uppercase">Jalur Zonasi</span>
-                  <span className="text-xs font-mono font-bold px-2 py-0.5 bg-blue-50 text-blue-900 rounded">
-                    Kuota 50%
-                  </span>
-                </div>
-                <h3 className="font-semibold text-slate-900 text-base">Zonasi Radius Domisili</h3>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  Diperuntukkan bagi calon murid yang berdomisili di dalam wilayah zonasi yang ditetapkan pemerintah berdasarkan jarak titik koordinat rumah ke sekolah.
-                </p>
-                <div className="text-[11px] text-slate-500 pt-2 border-t border-slate-100">
-                  Syarat: Kartu Keluarga minimal 1 tahun terbit.
-                </div>
-              </div>
-
-              <div className="bg-white p-6 rounded-xl border border-slate-200 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-amber-700 uppercase">Jalur Prestasi</span>
-                  <span className="text-xs font-mono font-bold px-2 py-0.5 bg-amber-50 text-amber-800 rounded">
-                    Kuota 30%
-                  </span>
-                </div>
-                <h3 className="font-semibold text-slate-900 text-base">Akademik & Kejuaraan</h3>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  Berdasarkan akumulasi rerata nilai rapor semester 1–5 (akademik) atau sertifikat juara perlombaan sains, seni, teknologi, dan olahraga tingkat kota hingga dunia.
-                </p>
-                <div className="text-[11px] text-slate-500 pt-2 border-t border-slate-100">
-                  Syarat: Rapor min. 85.0 / Sertifikat Juara 1-3.
-                </div>
-              </div>
-
-              <div className="bg-white p-6 rounded-xl border border-slate-200 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-emerald-700 uppercase">Jalur Afirmasi</span>
-                  <span className="text-xs font-mono font-bold px-2 py-0.5 bg-emerald-50 text-emerald-800 rounded">
-                    Kuota 15%
-                  </span>
-                </div>
-                <h3 className="font-semibold text-slate-900 text-base">Keluarga Ekonomi Kurang Mampu</h3>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  Dikhususkan bagi calon peserta didik dari keluarga ekonomi tidak mampu yang terdaftar dalam program penanganan keluarga miskin pemerintah pusat/daerah.
-                </p>
-                <div className="text-[11px] text-slate-500 pt-2 border-t border-slate-100">
-                  Syarat: KIP, PKH, atau terdata DTKS resmi.
-                </div>
-              </div>
-
-              <div className="bg-white p-6 rounded-xl border border-slate-200 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-purple-700 uppercase">Perpindahan Tugas</span>
-                  <span className="text-xs font-mono font-bold px-2 py-0.5 bg-purple-50 text-purple-800 rounded">
-                    Kuota 5%
-                  </span>
-                </div>
-                <h3 className="font-semibold text-slate-900 text-base">Mutasi Orang Tua / Wali</h3>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  Bagi anak dari orang tua yang berpindah tugas kedinasan (TNI, Polri, ASN, BUMN) ke wilayah sekitar sekolah serta anak kandung guru/tenaga kependidikan.
-                </p>
-                <div className="text-[11px] text-slate-500 pt-2 border-t border-slate-100">
-                  Syarat: Surat Keputusan Mutasi resmi instansi.
-                </div>
-              </div>
+              {ppdbInfo.paths.map((path, index) => {
+                const tones = [
+                  ['text-blue-900', 'bg-blue-50 text-blue-900'],
+                  ['text-amber-700', 'bg-amber-50 text-amber-800'],
+                  ['text-emerald-700', 'bg-emerald-50 text-emerald-800'],
+                  ['text-purple-700', 'bg-purple-50 text-purple-800']
+                ];
+                const [labelTone, quotaTone] = tones[index % tones.length];
+                return <div key={`${path.label}-${index}`} className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 sm:p-6">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`text-xs font-bold uppercase ${labelTone}`}>{path.label}</span>
+                    <span className={`rounded px-2 py-0.5 text-xs font-mono font-bold ${quotaTone}`}>Kuota {path.quota}</span>
+                  </div>
+                  <h3 className="text-base font-semibold text-slate-900">{path.title}</h3>
+                  <p className="text-xs leading-relaxed text-slate-600">{path.description}</p>
+                  <div className="border-t border-slate-100 pt-2 text-[11px] text-slate-500">Syarat: {path.requirement}</div>
+                </div>;
+              })}
             </div>
           </div>
 
@@ -232,33 +194,15 @@ export const PPDBView: React.FC<PPDBViewProps> = ({ onNavigate }) => {
             </h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-1">
-                <span className="text-[11px] font-mono font-bold text-blue-900">TAHAP 1</span>
-                <h4 className="font-semibold text-slate-900 text-sm">Pendaftaran Online</h4>
-                <p className="text-xs text-slate-500 font-mono">15 - 28 Oktober {academicYearStart}</p>
-                <p className="text-[11px] text-slate-600 pt-1">Pengisian formulir online & unggah berkas kelengkapan.</p>
-              </div>
-
-              <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-1">
-                <span className="text-[11px] font-mono font-bold text-amber-700">TAHAP 2</span>
-                <h4 className="font-semibold text-slate-900 text-sm">Verifikasi Berkas</h4>
-                <p className="text-xs text-slate-500 font-mono">29 Okt - 05 Nov {academicYearStart}</p>
-                <p className="text-[11px] text-slate-600 pt-1">Pemeriksaan keaslian sertifikat dan validasi geolokasi KK.</p>
-              </div>
-
-              <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-1">
-                <span className="text-[11px] font-mono font-bold text-emerald-700">TAHAP 3</span>
-                <h4 className="font-semibold text-slate-900 text-sm">Pengumuman Kelulusan</h4>
-                <p className="text-xs text-slate-500 font-mono">10 November {academicYearStart}</p>
-                <p className="text-[11px] text-slate-600 pt-1">Hasil seleksi resmi diumumkan serentak di portal ini pukul 10.00 WIT.</p>
-              </div>
-
-              <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-1">
-                <span className="text-[11px] font-mono font-bold text-purple-700">TAHAP 4</span>
-                <h4 className="font-semibold text-slate-900 text-sm">Daftar Ulang Siswa</h4>
-                <p className="text-xs text-slate-500 font-mono">12 - 16 November {academicYearStart}</p>
-                <p className="text-[11px] text-slate-600 pt-1">Penyerahan dokumen fisik dan orientasi pengenalan sekolah.</p>
-              </div>
+              {ppdbInfo.stages.map((stage, index) => {
+                const tones = ['text-blue-900', 'text-amber-700', 'text-emerald-700', 'text-purple-700'];
+                return <div key={`${stage.label}-${index}`} className="space-y-1 rounded-xl border border-slate-200 bg-white p-4">
+                  <span className={`text-[11px] font-mono font-bold ${tones[index % tones.length]}`}>{stage.label}</span>
+                  <h4 className="text-sm font-semibold text-slate-900">{stage.title}</h4>
+                  <p className="text-xs font-mono text-slate-500">{stage.date.replaceAll('{tahun}', String(academicYearStart))}</p>
+                  <p className="pt-1 text-[11px] text-slate-600">{stage.description}</p>
+                </div>;
+              })}
             </div>
 
             <div className="pt-2 flex justify-center">

@@ -211,7 +211,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenGalleryPho
             <div className="pt-3 flex flex-wrap items-center gap-3 sm:pt-4">
               <button
                 onClick={() => onNavigate('ppdb')}
-                className="px-6 py-3 text-sm font-semibold text-slate-950 bg-amber-400 hover:bg-amber-300 rounded-md transition-all shadow-md hover:shadow-lg flex items-center gap-2 whitespace-nowrap"
+                className="min-h-11 max-w-full justify-center px-4 py-3 text-center text-xs font-semibold text-slate-950 bg-amber-400 hover:bg-amber-300 rounded-md transition-all shadow-md hover:shadow-lg flex items-center gap-2 whitespace-normal sm:px-6 sm:text-sm"
               >
                 <span>Pendaftaran PPDB {academicYear}</span>
                 <ArrowRight className="w-4 h-4" />

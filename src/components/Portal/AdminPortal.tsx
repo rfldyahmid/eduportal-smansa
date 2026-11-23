@@ -34,6 +34,7 @@ import {
   updateVideo,
   removeVideo,
   fetchKombelActivities,
+  fetchKombelFacebookPostDate,
   createKombelActivity,
   updateKombelActivity,
   removeKombelActivity,
@@ -106,6 +107,7 @@ import {
   Images,
   ImagePlus,
   Video,
+  Facebook,
   Play,
   BookOpen,
   Key,
@@ -318,6 +320,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
     author: 'Tim Humas & Kurikulum',
     summary: '',
     content: '',
+    facebookUrl: '',
     images: [] as string[]
   });
 
@@ -371,9 +374,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
     image: '',
     description: '',
     speaker: '',
-    attendeesCount: 20
+    attendeesCount: 20,
+    facebookUrl: ''
   });
   const [kombelActivityImages, setKombelActivityImages] = useState<string[]>([]);
+  const [kombelFacebookDateMessage, setKombelFacebookDateMessage] = useState('');
 
   const [isKombelAgendaModalOpen, setIsKombelAgendaModalOpen] = useState(false);
   const [editingKombelAgenda, setEditingKombelAgenda] = useState<KombelAgenda | null>(null);
@@ -1100,6 +1105,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
       author: 'Tim Humas & Kurikulum',
       summary: '',
       content: '',
+      facebookUrl: '',
       images: []
     });
     setIsAnnouncementModalOpen(true);
@@ -1114,6 +1120,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
       author: item.author,
       summary: item.summary,
       content: item.content,
+      facebookUrl: item.facebookUrl || '',
       images: item.images?.length ? item.images : item.image ? [item.image] : []
     });
     setIsAnnouncementModalOpen(true);
@@ -1444,13 +1451,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
   // ---------------- KOMBEL ACTIVITIES & AGENDAS ----------------
   const handleOpenAddKombelActivity = () => {
     setEditingKombelActivity(null);
+    setKombelFacebookDateMessage('');
     setKombelActivityForm({
       title: '',
       date: toDateInputValue(),
       image: '',
       description: '',
       speaker: 'Lukman Hi. Saleh, S.Pd',
-      attendeesCount: 24
+      attendeesCount: 24,
+      facebookUrl: ''
     });
     setKombelActivityImages([]);
     setIsKombelActivityModalOpen(true);
@@ -1458,16 +1467,38 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
 
   const handleOpenEditKombelActivity = (act: KombelActivity) => {
     setEditingKombelActivity(act);
+    setKombelFacebookDateMessage('');
     setKombelActivityForm({
       title: act.title,
       date: announcementDateToInputValue(act.date),
       image: act.image || '',
       description: act.description,
       speaker: act.speaker || '',
-      attendeesCount: act.attendeesCount || 20
+      attendeesCount: act.attendeesCount || 20,
+      facebookUrl: act.facebookUrl || ''
     });
     setKombelActivityImages([act.image, ...(act.additionalImages || [])].filter(Boolean));
     setIsKombelActivityModalOpen(true);
+  };
+
+  const syncKombelActivityDateFromFacebook = async () => {
+    const url = kombelActivityForm.facebookUrl.trim();
+    if (!url) return;
+    setKombelFacebookDateMessage('Memeriksa tanggal unggahan Facebook...');
+    try {
+      const result = await fetchKombelFacebookPostDate(url);
+      setKombelActivityForm(current => ({
+        ...current,
+        date: result.dateInput,
+        image: result.thumbnailUrl || current.image
+      }));
+      if (result.thumbnailUrl) {
+        setKombelActivityImages(current => [result.thumbnailUrl!, ...current.slice(1)]);
+      }
+      setKombelFacebookDateMessage(`Tanggal unggahan disesuaikan: ${result.date}`);
+    } catch (err: any) {
+      setKombelFacebookDateMessage(`${err?.message || 'Tanggal unggahan Facebook gagal dibaca.'} Tautan tetap dapat disimpan; isi tanggal secara manual.`);
+    }
   };
 
   const handleKombelActivityFilesChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1496,30 +1527,51 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
 
   const handleSaveKombelActivity = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!kombelActivityForm.title || !kombelActivityForm.description) return;
-    if ((!editingKombelActivity && (kombelActivityImages.length < 3 || kombelActivityImages.length > 5)) ||
-        (editingKombelActivity && (kombelActivityImages.length < 1 || kombelActivityImages.length > 5))) {
+    if (!kombelActivityForm.title || (!kombelActivityForm.facebookUrl && !kombelActivityForm.description)) return;
+    if (!kombelActivityForm.facebookUrl && ((!editingKombelActivity && (kombelActivityImages.length < 3 || kombelActivityImages.length > 5)) ||
+        (editingKombelActivity && (kombelActivityImages.length < 1 || kombelActivityImages.length > 5)))) {
       alert(editingKombelActivity
         ? 'Sisakan minimal 1 dan maksimal 5 foto dokumentasi.'
         : 'Pilih 3 sampai 5 foto untuk dokumentasi kegiatan baru.');
       return;
     }
     try {
+      let submittedKombelForm = kombelActivityForm;
+      let facebookPublishedAt = editingKombelActivity?.facebookUrl === kombelActivityForm.facebookUrl
+        ? editingKombelActivity.facebookPublishedAt || ''
+        : '';
+      if (kombelActivityForm.facebookUrl.trim()) {
+        try {
+          const facebookData = await fetchKombelFacebookPostDate(kombelActivityForm.facebookUrl.trim());
+          facebookPublishedAt = facebookData.publishedAt;
+          submittedKombelForm = {
+            ...kombelActivityForm,
+            date: facebookData.dateInput,
+            image: facebookData.thumbnailUrl || kombelActivityForm.image
+          };
+          setKombelActivityForm(submittedKombelForm);
+          if (facebookData.thumbnailUrl) setKombelActivityImages([facebookData.thumbnailUrl]);
+        } catch (err: any) {
+          setKombelFacebookDateMessage(`${err?.message || 'Tanggal Facebook tidak dapat dibaca.'} Data tetap disimpan memakai tanggal yang dipilih.`);
+        }
+      }
       if (editingKombelActivity) {
         const payload: KombelActivity = {
           ...editingKombelActivity,
-          ...kombelActivityForm,
-          date: formatAnnouncementDate(kombelActivityForm.date),
-          image: kombelActivityImages[0],
+          ...submittedKombelForm,
+          facebookPublishedAt,
+          date: formatAnnouncementDate(submittedKombelForm.date),
+          image: submittedKombelForm.image || kombelActivityImages[0] || 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&q=80&w=800',
           additionalImages: kombelActivityImages.slice(1)
         };
         const updated = await updateKombelActivity(payload);
         setKombelActivities(prev => prev.map(a => (a.id === updated.id ? updated : a)));
       } else {
         const created = await createKombelActivity({
-          ...kombelActivityForm,
-          date: formatAnnouncementDate(kombelActivityForm.date),
-          image: kombelActivityImages[0],
+          ...submittedKombelForm,
+          facebookPublishedAt,
+          date: formatAnnouncementDate(submittedKombelForm.date),
+          image: submittedKombelForm.image || kombelActivityImages[0] || 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&q=80&w=800',
           additionalImages: kombelActivityImages.slice(1)
         });
         setKombelActivities(prev => [created, ...prev]);
@@ -3768,6 +3820,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
                         <div className="text-[11px] font-mono text-blue-900 font-semibold">{act.date}</div>
                         <h3 className="font-bold text-slate-900 text-sm leading-snug">{act.title}</h3>
                         <p className="text-xs text-slate-600 line-clamp-3">{act.description}</p>
+                        {act.facebookUrl && (
+                          <a href={act.facebookUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 hover:underline">
+                            <Facebook className="h-3.5 w-3.5" /> Lihat unggahan Facebook
+                          </a>
+                        )}
                         {act.speaker && (
                           <div className="text-[11px] text-slate-500">
                             <strong>Narasumber:</strong> {act.speaker}
@@ -5025,6 +5082,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
                 />
               </div>
 
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-700">Tautan Facebook (opsional)</label>
+                <input
+                  type="url"
+                  inputMode="url"
+                  placeholder="https://www.facebook.com/..."
+                  value={announcementForm.facebookUrl}
+                  onChange={e => setAnnouncementForm({ ...announcementForm, facebookUrl: e.target.value })}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs"
+                />
+                <p className="text-[11px] text-slate-500">Pengunjung yang membuka pengumuman ini akan langsung diarahkan ke unggahan Facebook.</p>
+              </div>
+
               {currentUser.role === 'admin' && (
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-slate-700">Foto Pengumuman (3–5 foto)</label>
@@ -5268,6 +5338,21 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
               </div>
 
               <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-700">Tautan unggahan Facebook (opsional)</label>
+                <input
+                  type="url"
+                  inputMode="url"
+                  placeholder="https://www.facebook.com/..."
+                  value={kombelActivityForm.facebookUrl}
+                  onChange={e => setKombelActivityForm({ ...kombelActivityForm, facebookUrl: e.target.value })}
+                  onBlur={syncKombelActivityDateFromFacebook}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg"
+                />
+                <p className="text-[11px] text-slate-500">Tanggal unggahan otomatis diambil dari Facebook jika token Halaman sudah diatur di server.</p>
+                {kombelFacebookDateMessage && <p role="status" className="text-[11px] text-amber-700">{kombelFacebookDateMessage}</p>}
+              </div>
+
+              <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-700">Narasumber / Fasilitator</label>
                 <input
                   type="text"
@@ -5278,10 +5363,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-700">Ringkasan Kegiatan & Hasil</label>
+                <label className="text-xs font-semibold text-slate-700">Ringkasan Kegiatan & Hasil {!kombelActivityForm.facebookUrl && '*'}</label>
                 <textarea
                   rows={3}
-                  required
+                  required={!kombelActivityForm.facebookUrl}
                   value={kombelActivityForm.description}
                   onChange={e => setKombelActivityForm({ ...kombelActivityForm, description: e.target.value })}
                   className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg"
@@ -5300,7 +5385,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentUser, onLogout 
                   className="w-full text-xs border border-slate-300 rounded-lg p-2 bg-white"
                 />
                 <p className="text-[11px] text-slate-500">
-                  {editingKombelActivity
+                  {kombelActivityForm.facebookUrl
+                    ? 'Foto dokumentasi opsional karena tautan Facebook sudah ditambahkan.'
+                    : editingKombelActivity
                     ? 'Hapus foto dengan tombol × pada pratinjau, lalu unggah foto pengganti. Maksimal 5 foto.'
                     : 'Pilih 3 sampai 5 foto untuk satu kegiatan baru.'}
                   {' '}Ukuran total maksimal 8 MB.

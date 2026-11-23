@@ -1,5 +1,5 @@
 import React from 'react';
-import { Compass, Award, Shield, Heart, Globe2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Compass, UsersRound, MessageCircle, Handshake, ShieldCheck, ChevronLeft, ChevronRight } from 'lucide-react';
 import { SCHOOL_MISSIONS } from '../utils/schoolMissions';
 
 interface VisiMisiViewProps {
@@ -8,7 +8,7 @@ interface VisiMisiViewProps {
 
 export const VisiMisiView: React.FC<VisiMisiViewProps> = ({ onNavigate }) => {
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-8 py-10 lg:py-16 space-y-12">
+    <div className="max-w-6xl mx-auto px-4 sm:px-8 py-7 sm:py-10 lg:py-16 space-y-8 sm:space-y-12">
       {/* Header Breadcrumb */}
       <div className="border-b border-slate-200 pb-6 space-y-2">
         <div className="flex items-center gap-2 text-xs font-semibold text-blue-900 uppercase tracking-widest">
@@ -18,7 +18,7 @@ export const VisiMisiView: React.FC<VisiMisiViewProps> = ({ onNavigate }) => {
           <span>/</span>
           <span className="text-slate-500">Visi & Misi</span>
         </div>
-        <h1 className="font-serif-title text-3xl sm:text-4xl font-bold text-slate-900">
+        <h1 className="font-serif-title text-2xl min-[400px]:text-3xl sm:text-4xl font-bold text-slate-900">
           Visi, Misi, & Falsafah Luhur Sekolah
         </h1>
         <p className="text-sm text-slate-500 max-w-2xl">
@@ -72,7 +72,7 @@ export const VisiMisiView: React.FC<VisiMisiViewProps> = ({ onNavigate }) => {
             Kearifan Lokal
           </span>
           <h2 className="font-serif-title text-2xl font-bold text-slate-900">
-            Empat Pilar Falsafah Luhur "Fagogoru"
+            Nilai-Nilai Utama
           </h2>
           <p className="text-xs sm:text-sm text-slate-600">
             Pondasi moral budaya Halmahera Tengah yang menjiwai karakter dan keseharian warga SMAN 1 Halmahera Tengah.
@@ -81,34 +81,34 @@ export const VisiMisiView: React.FC<VisiMisiViewProps> = ({ onNavigate }) => {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-2">
-            <Heart className="w-5 h-5 text-rose-600" />
-            <h4 className="font-bold text-slate-900 text-sm">Faisayang (Kasih Sayang)</h4>
+            <UsersRound className="w-5 h-5 text-rose-600" />
+            <h4 className="font-bold text-slate-900 text-sm">Ngaku re rasai</h4>
             <p className="text-xs text-slate-600 leading-relaxed">
-              Saling mengasihi, menyayangi, dan berempati antarwarga sekolah tanpa membeda-bedakan latar belakang sosial.
+              Kebersamaan, kekeluargaan, dan kesadaran akan persaudaraan serta keterhubungan antarmanusia.
             </p>
           </div>
 
           <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-2">
-            <Shield className="w-5 h-5 text-blue-900" />
-            <h4 className="font-bold text-slate-900 text-sm">Fangare (Saling Menghormati)</h4>
+            <MessageCircle className="w-5 h-5 text-blue-900" />
+            <h4 className="font-bold text-slate-900 text-sm">Budi re bahasa</h4>
             <p className="text-xs text-slate-600 leading-relaxed">
-              Menjunjung tinggi kehormatan, tata krama kepada guru dan orang tua, serta menghargai perbedaan pandangan.
+              Kebaikan hati dan kesantunan dalam bertutur kata.
             </p>
           </div>
 
           <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-2">
-            <Globe2 className="w-5 h-5 text-emerald-600" />
-            <h4 className="font-bold text-slate-900 text-sm">Faimomamo (Gotong Royong)</h4>
+            <Handshake className="w-5 h-5 text-emerald-600" />
+            <h4 className="font-bold text-slate-900 text-sm">Sopan re hormat</h4>
             <p className="text-xs text-slate-600 leading-relaxed">
-              Semangat bahu-membahu, saling menolong saat rekan mengalami kesulitan belajar, dan kerja sama demi kemajuan bersama.
+              Tata krama serta sikap saling menghargai dan menghormati sesama, termasuk kepada yang lebih tua.
             </p>
           </div>
 
           <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-2">
-            <Award className="w-5 h-5 text-amber-600" />
-            <h4 className="font-bold text-slate-900 text-sm">Faliyaro (Rasa Memiliki)</h4>
+            <ShieldCheck className="w-5 h-5 text-amber-600" />
+            <h4 className="font-bold text-slate-900 text-sm">Remimo</h4>
             <p className="text-xs text-slate-600 leading-relaxed">
-              Rasa tanggung jawab menjaga martabat sekolah dan berpartisipasi aktif memajukan bumi Fagogoru.
+              Rasa malu dan takut berbuat salah atau melanggar norma adat.
             </p>
           </div>
         </div>

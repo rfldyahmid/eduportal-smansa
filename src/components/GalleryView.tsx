@@ -110,7 +110,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ onNavigate, currentUse
   }, [activePhoto, activeVideo, allImagesForActive.length]);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-8 py-10 lg:py-16 space-y-10">
+    <div className="max-w-7xl mx-auto px-4 sm:px-8 py-7 sm:py-10 lg:py-16 space-y-8 sm:space-y-10">
       {/* Header & Breadcrumb */}
       <div className="border-b border-slate-200 pb-6 space-y-2">
         <div className="flex items-center gap-2 text-xs font-semibold text-blue-900 uppercase tracking-widest">
@@ -120,7 +120,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ onNavigate, currentUse
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="font-serif-title text-3xl sm:text-4xl font-bold text-slate-900">
+            <h1 className="font-serif-title text-2xl min-[400px]:text-3xl sm:text-4xl font-bold text-slate-900">
               Galeri Kegiatan & Video Sekolah
             </h1>
             <p className="text-sm text-slate-500 max-w-2xl mt-1">
@@ -320,7 +320,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ onNavigate, currentUse
             </button>
 
             {/* Main Image with Prev/Next controls */}
-            <div className="relative aspect-[16/9] bg-slate-950 flex items-center justify-center overflow-hidden">
+            <div className="relative aspect-[4/3] bg-slate-950 flex items-center justify-center overflow-hidden sm:aspect-[16/9]">
               <img
                 src={allImagesForActive[activePhotoIndex]}
                 alt={activePhoto.title}

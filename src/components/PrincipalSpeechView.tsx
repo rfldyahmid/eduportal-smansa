@@ -8,7 +8,7 @@ interface PrincipalSpeechViewProps {
 
 export const PrincipalSpeechView: React.FC<PrincipalSpeechViewProps> = ({ onNavigate }) => {
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-8 py-10 lg:py-16 space-y-12">
+    <div className="max-w-5xl mx-auto px-4 sm:px-8 py-7 sm:py-10 lg:py-16 space-y-8 sm:space-y-12">
       {/* Header Breadcrumb & Title */}
       <div className="border-b border-slate-200 pb-6 space-y-2">
         <div className="flex items-center gap-2 text-xs font-semibold text-blue-900 uppercase tracking-widest">
@@ -18,7 +18,7 @@ export const PrincipalSpeechView: React.FC<PrincipalSpeechViewProps> = ({ onNavi
           <span>/</span>
           <span className="text-slate-500">Sambutan Kepala Sekolah</span>
         </div>
-        <h1 className="font-serif-title text-3xl sm:text-4xl font-bold text-slate-900">
+        <h1 className="font-serif-title text-2xl min-[400px]:text-3xl sm:text-4xl font-bold text-slate-900">
           Sambutan Kepala SMA Negeri 1 Halmahera Tengah
         </h1>
         <p className="text-sm text-slate-500">

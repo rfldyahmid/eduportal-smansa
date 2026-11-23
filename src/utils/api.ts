@@ -12,6 +12,7 @@ import {
   PPDBStatusResult,
   ContactMessage,
   ContactInfo,
+  PpdbWebsiteInfo,
   Assignment,
   AssignmentSubmission,
   PortalAnnouncement,
@@ -430,6 +431,13 @@ export async function fetchKombelActivities(): Promise<KombelActivity[]> {
   return apiRequest<KombelActivity[]>('/kombel/activities');
 }
 
+export async function fetchKombelFacebookPostDate(url: string): Promise<{ date: string; dateInput: string; publishedAt: string; thumbnailUrl?: string }> {
+  return apiRequest<{ date: string; dateInput: string; publishedAt: string; thumbnailUrl?: string }>('/kombel/facebook-post-date', {
+    method: 'POST',
+    body: JSON.stringify({ url })
+  });
+}
+
 export async function createKombelActivity(payload: Omit<KombelActivity, 'id' | 'createdAt'>): Promise<KombelActivity> {
   return apiRequest<KombelActivity>('/kombel/activities', {
     method: 'POST',
@@ -486,6 +494,13 @@ export async function updateTeacher(item: Teacher): Promise<Teacher> {
   return apiRequest<Teacher>(`/teachers/${encodeURIComponent(item.id)}`, {
     method: 'PUT',
     body: JSON.stringify(item)
+  });
+}
+
+export async function updateMyTeacherPhoto(image: string): Promise<{ photoUrl: string }> {
+  return apiRequest<{ photoUrl: string }>('/teacher/profile/photo', {
+    method: 'PUT',
+    body: JSON.stringify({ image })
   });
 }
 
@@ -566,6 +581,17 @@ export async function removeSchedule(id: string): Promise<void> {
 }
 
 // ---------------- PPDB ----------------
+export async function fetchPpdbWebsiteInfo(): Promise<PpdbWebsiteInfo> {
+  return apiRequest<PpdbWebsiteInfo>('/ppdb/website-info');
+}
+
+export async function updatePpdbWebsiteInfo(info: PpdbWebsiteInfo): Promise<PpdbWebsiteInfo> {
+  return apiRequest<PpdbWebsiteInfo>('/ppdb/website-info', {
+    method: 'PUT',
+    body: JSON.stringify(info)
+  });
+}
+
 export async function fetchPPDB(): Promise<PPDBApplicant[]> {
   return apiRequest<PPDBApplicant[]>('/ppdb');
 }

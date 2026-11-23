@@ -1637,18 +1637,91 @@ app.delete('/api/videos/:id', requireAdmin, async (req, res) => {
 // ----------------------------------------------------
 // 6. KOMBEL (KOMUNITAS BELAJAR GURU)
 // ----------------------------------------------------
+app.post('/api/kombel/facebook-post-date', requireAdminOrKombel, async (req, res) => {
+  const rawUrl = typeof req.body?.url === 'string' ? req.body.url.trim() : '';
+  let postUrl: URL;
+  try {
+    postUrl = new URL(rawUrl);
+  } catch {
+    return res.status(400).json({ message: 'Tautan unggahan Facebook tidak valid.' });
+  }
+  if (!['facebook.com', 'www.facebook.com', 'm.facebook.com', 'web.facebook.com'].includes(postUrl.hostname.toLowerCase()) || postUrl.protocol !== 'https:') {
+    return res.status(400).json({ message: 'Gunakan tautan unggahan dari facebook.com.' });
+  }
+
+  const accessToken = process.env.KOMBEL_FACEBOOK_PAGE_ACCESS_TOKEN;
+  if (!accessToken) {
+    return res.status(503).json({ message: 'Tanggal otomatis belum aktif. Atur KOMBEL_FACEBOOK_PAGE_ACCESS_TOKEN di konfigurasi server.' });
+  }
+
+  try {
+    const graphUrl = new URL('https://graph.facebook.com/v27.0/');
+    graphUrl.searchParams.set('id', postUrl.toString());
+    graphUrl.searchParams.set('fields', 'created_time,full_picture,attachments{media}');
+    graphUrl.searchParams.set('access_token', accessToken);
+    const response = await fetch(graphUrl, { signal: AbortSignal.timeout(8000) });
+    const data = await response.json() as {
+      created_time?: string;
+      full_picture?: string;
+      attachments?: { data?: Array<{ media?: { image?: { src?: string }; source?: string } }> };
+      error?: { message?: string };
+    };
+    if (!response.ok || !data.created_time) {
+      return res.status(422).json({ message: data.error?.message || 'Tanggal unggahan Facebook tidak dapat dibaca. Pastikan unggahan publik berasal dari Halaman yang terhubung dengan token.' });
+    }
+    const publishedAt = new Date(data.created_time);
+    if (Number.isNaN(publishedAt.getTime())) {
+      return res.status(422).json({ message: 'Facebook mengembalikan tanggal unggahan yang tidak valid.' });
+    }
+    const date = new Intl.DateTimeFormat('id-ID', {
+      timeZone: 'Asia/Jayapura', day: 'numeric', month: 'long', year: 'numeric'
+    }).format(publishedAt);
+    const dateParts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Jayapura', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(publishedAt);
+    const dateValues = Object.fromEntries(dateParts.map(part => [part.type, part.value]));
+    const dateInput = `${dateValues.year}-${dateValues.month}-${dateValues.day}`;
+    const attachmentImage = data.attachments?.data?.[0]?.media?.image?.src || data.attachments?.data?.[0]?.media?.source;
+    const candidateThumbnail = data.full_picture || attachmentImage;
+    let thumbnailUrl: string | undefined;
+    if (candidateThumbnail) {
+      try {
+        const parsedThumbnail = new URL(candidateThumbnail);
+        if (parsedThumbnail.protocol === 'https:') thumbnailUrl = parsedThumbnail.toString();
+      } catch {
+        // Omit malformed media URLs returned by the Graph API.
+      }
+    }
+    res.json({ date, dateInput, publishedAt: publishedAt.toISOString(), thumbnailUrl });
+  } catch {
+    res.status(502).json({ message: 'Tidak dapat menghubungi Facebook untuk membaca tanggal unggahan.' });
+  }
+});
+
 app.get('/api/kombel/activities', async (_req, res) => {
   const db = await getDb();
-  const data = [...db.kombelActivities].sort((a, b) =>
-    new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime()
-  );
+  const parseDate = (value?: string) => {
+    if (!value) return 0;
+    const direct = new Date(value).getTime();
+    if (Number.isFinite(direct)) return direct;
+    const match = value.match(/^(\d{1,2})\s+([\p{L}]+)\s+(\d{4})$/u);
+    if (!match) return 0;
+    const months = ['januari', 'februari', 'maret', 'april', 'mei', 'juni', 'juli', 'agustus', 'september', 'oktober', 'november', 'desember'];
+    const month = months.indexOf(match[2].toLocaleLowerCase('id-ID'));
+    return month < 0 ? 0 : new Date(Number(match[3]), month, Number(match[1])).getTime();
+  };
+  const timestamp = (item: KombelActivity) => {
+    const value = item.facebookUrl ? (item.facebookPublishedAt || item.date) : item.createdAt;
+    return parseDate(value);
+  };
+  const data = [...db.kombelActivities].sort((a, b) => timestamp(b) - timestamp(a));
   res.json(data);
 });
 
 app.post('/api/kombel/activities', requireAdminOrKombel, async (req, res) => {
   try {
     const body = req.body || {};
-    if (!body.title || !body.description) {
+    if (!body.title || (!body.description && !body.facebookUrl)) {
       return res.status(400).json({ message: 'Judul dan deskripsi kegiatan KOMBEL wajib diisi.' });
     }
     let image = body.image || 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&q=80&w=800';
@@ -1669,6 +1742,8 @@ app.post('/api/kombel/activities', requireAdminOrKombel, async (req, res) => {
       description: String(body.description).trim(),
       speaker: body.speaker ? String(body.speaker).trim() : undefined,
       attendeesCount: body.attendeesCount ? Number(body.attendeesCount) : undefined,
+      facebookUrl: body.facebookUrl ? String(body.facebookUrl).trim() : undefined,
+      facebookPublishedAt: body.facebookUrl && body.facebookPublishedAt ? String(body.facebookPublishedAt) : undefined,
       createdAt: new Date().toISOString()
     };
 
@@ -2153,6 +2228,33 @@ app.put('/api/teachers/:id', requireAdminOrKombel, async (req: AuthenticatedRequ
   }
 });
 
+app.put('/api/teacher/profile/photo', requireAuth, async (req: AuthenticatedRequest, res) => {
+  let savedPhotoUrl: string | undefined;
+  try {
+    const db = await getDb();
+    const user = db.users.find(item => item.id === req.user?.sub);
+    if (!user || !['guru', 'kepala_sekolah', 'ketua_kombel'].includes(user.role)) {
+      return res.status(403).json({ message: 'Fitur ini hanya tersedia untuk akun guru.' });
+    }
+    const teacher = db.teachers.find(item => item.id === user.linkedId || item.nip === user.username);
+    if (!teacher) return res.status(404).json({ message: 'Profil guru yang terhubung ke akun ini tidak ditemukan.' });
+    if (typeof req.body?.image !== 'string' || !req.body.image.startsWith('data:image/')) {
+      return res.status(400).json({ message: 'Pilih foto profil JPG, PNG, atau WebP.' });
+    }
+
+    const previousPhoto = teacher.photoUrl;
+    savedPhotoUrl = await persistImage(req.body.image, 'teacher-profile');
+    teacher.photoUrl = savedPhotoUrl;
+    user.avatarUrl = savedPhotoUrl;
+    await saveDb();
+    if (previousPhoto !== savedPhotoUrl) await safeDeleteImage(previousPhoto);
+    res.json({ photoUrl: savedPhotoUrl });
+  } catch (error: any) {
+    if (savedPhotoUrl) await safeDeleteImage(savedPhotoUrl);
+    res.status(400).json({ message: error?.message || 'Foto profil gagal diperbarui.' });
+  }
+});
+
 app.delete('/api/teachers/:id', requireAdmin, async (req, res) => {
   const db = await getDb();
   const item = db.teachers.find(t => t.id === req.params.id);
@@ -2539,6 +2641,34 @@ app.delete('/api/portal-announcements/:id', requireStaff, async (req: Authentica
 // ----------------------------------------------------
 // 10. PPDB (PENERIMAAN SISWA BARU)
 // ----------------------------------------------------
+app.get('/api/ppdb/website-info', async (_req, res) => {
+  const db = await getDb();
+  res.json(db.ppdbWebsiteInfo);
+});
+
+app.put('/api/ppdb/website-info', requireAdminOrKombel, async (req, res) => {
+  const body = req.body || {};
+  const validRows = (rows: unknown, fields: string[], maxRows: number) => Array.isArray(rows) && rows.length > 0 && rows.length <= maxRows && rows.every(row =>
+    row && typeof row === 'object' && fields.every(field => {
+      const value = (row as Record<string, unknown>)[field];
+      return typeof value === 'string' && value.trim().length > 0 && value.trim().length <= 1200;
+    })
+  );
+  if (typeof body.introduction !== 'string' || !body.introduction.trim() || body.introduction.trim().length > 1200 ||
+      !validRows(body.paths, ['label', 'title', 'quota', 'description', 'requirement'], 8) ||
+      !validRows(body.stages, ['label', 'title', 'date', 'description'], 10)) {
+    return res.status(400).json({ message: 'Informasi PPDB tidak valid. Periksa kembali semua kolom.' });
+  }
+  const db = await getDb();
+  db.ppdbWebsiteInfo = {
+    introduction: body.introduction.trim(),
+    paths: body.paths.map((path: Record<string, string>) => Object.fromEntries(Object.entries(path).map(([key, value]) => [key, value.trim()]))),
+    stages: body.stages.map((stage: Record<string, string>) => Object.fromEntries(Object.entries(stage).map(([key, value]) => [key, value.trim()])))
+  };
+  await saveDb();
+  res.json(db.ppdbWebsiteInfo);
+});
+
 app.get('/api/ppdb', requireMonitoringStaff, async (_req, res) => {
   const db = await getDb();
   res.json(db.ppdb);

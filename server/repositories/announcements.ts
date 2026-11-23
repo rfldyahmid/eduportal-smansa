@@ -19,12 +19,14 @@ interface Row {
   is_important: boolean;
   date_label: string | null;
   images: string[];
+  facebook_url: string | null;
 }
 
 const SELECT_SQL = `
   SELECT a.id, a.title, a.category,
          to_char(a.published_on, 'YYYY-MM-DD') AS published_on,
          a.author, a.summary, a.content, a.created_at, a.is_important, a.date_label,
+         a.facebook_url,
          COALESCE(
            array_agg(i.image_url ORDER BY i.position) FILTER (WHERE i.image_url IS NOT NULL),
            '{}'
@@ -47,6 +49,7 @@ function toAnnouncement(row: Row): Announcement {
     isImportant: row.is_important,
   };
   if (row.created_at) item.createdAt = row.created_at.toISOString();
+  if (row.facebook_url) item.facebookUrl = row.facebook_url;
   return item;
 }
 
@@ -105,6 +108,7 @@ export interface NewAnnouncement {
   content: string;
   images: string[];
   isImportant: boolean;
+  facebookUrl?: string;
 }
 
 export async function createAnnouncement(input: NewAnnouncement): Promise<Announcement> {
@@ -116,10 +120,10 @@ export async function createAnnouncement(input: NewAnnouncement): Promise<Announ
   await inTransaction(async client => {
     await client.query(
       `INSERT INTO announcements
-         (id, title, category, published_on, date_label, author, summary, content, is_important, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())`,
+         (id, title, category, published_on, date_label, author, summary, content, is_important, facebook_url, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())`,
       [input.id, input.title, input.category, publishedOn, input.date,
-       input.author, input.summary, input.content, input.isImportant],
+       input.author, input.summary, input.content, input.isImportant, input.facebookUrl || null],
     );
     await replaceImages(client, input.id, input.images);
   });
@@ -165,6 +169,11 @@ export async function updateAnnouncement(
   }
 
   if (fields.isImportant !== undefined) set('is_important', Boolean(fields.isImportant));
+
+  if (fields.facebookUrl !== undefined) {
+    const facebookUrl = String(fields.facebookUrl).trim();
+    set('facebook_url', facebookUrl || null);
+  }
 
   const found = await inTransaction(async client => {
     if (sets.length > 0) {
