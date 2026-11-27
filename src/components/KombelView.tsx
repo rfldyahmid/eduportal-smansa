@@ -452,8 +452,8 @@ export const KombelView: React.FC<KombelViewProps> = ({ onNavigate, currentUser 
           <div role="dialog" aria-modal="true" aria-label={`Detail foto ${activeActivityPhoto.activity.title}`} className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm" onClick={() => setActiveActivityPhoto(null)}>
             <div className="relative flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl" onClick={event => event.stopPropagation()}>
               <button type="button" aria-label="Tutup detail foto" onClick={() => setActiveActivityPhoto(null)} className="absolute right-3 top-3 z-10 rounded-full bg-black/60 p-2 text-white hover:bg-black/80"><X className="h-5 w-5" /></button>
-              <div className="relative flex min-h-0 flex-1 items-center justify-center bg-slate-950">
-                <img src={images[index]} alt={`${activeActivityPhoto.activity.title} — foto ${index + 1}`} className="max-h-[68vh] w-full object-contain" />
+              <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden bg-slate-950 sm:aspect-[16/9]">
+                <img src={images[index]} alt={`${activeActivityPhoto.activity.title} — foto ${index + 1}`} className="h-full w-full object-contain" />
                 {images.length > 1 && <>
                   <button type="button" aria-label="Foto sebelumnya" onClick={() => setActiveActivityPhoto(current => current ? { ...current, index: (current.index - 1 + images.length) % images.length } : null)} className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white hover:bg-black/80"><ChevronLeft className="h-6 w-6" /></button>
                   <button type="button" aria-label="Foto berikutnya" onClick={() => setActiveActivityPhoto(current => current ? { ...current, index: (current.index + 1) % images.length } : null)} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white hover:bg-black/80"><ChevronRight className="h-6 w-6" /></button>
