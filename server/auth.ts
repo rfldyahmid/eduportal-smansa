@@ -146,7 +146,7 @@ export function requireRole(allowedRoles: UserRole[]) {
 
 export const requireAdmin = requireRole(['admin']);
 export const requireAdminOrKombel = requireRole(['admin', 'ketua_kombel']);
-export const requireAdminOrTeacher = requireRole(['admin', 'guru']);
+export const requireAdminOrTeacher = requireRole(['admin', 'guru', 'ketua_kombel']);
 // Staff mutations intentionally exclude the principal. Use requireMonitoringStaff
 // only on read endpoints that expose school-wide monitoring data.
 export const requireStaff = requireRole(['admin', 'guru', 'ketua_kombel']);

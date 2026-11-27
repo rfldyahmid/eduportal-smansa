@@ -25,7 +25,6 @@ import {
   requireAdminOrTeacher,
   requireStaff,
   requireMonitoringStaff,
-  requireAdminTeacherOrPrincipalRead,
   requireRole,
   rejectPrincipalMutation,
   type AuthenticatedRequest
@@ -76,7 +75,53 @@ const app = express();
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use(express.json({ limit: '36mb' }));
-app.get('/uploads/:filename', async (req, res, next) => {
+const protectUploadedFile: import('express').RequestHandler = async (req: AuthenticatedRequest, res, next) => {
+  const filename = path.basename(req.params.filename);
+  const fileUrl = `/uploads/${filename}`;
+  try {
+    const db = await getDb();
+    const submission = db.submissions.find(item => item.linkOrContent === fileUrl);
+    const assignment = db.assignments.find(item => item.attachmentUrl === fileUrl);
+    const portalAnnouncement = db.portalAnnouncements.find(item => item.imageUrl === fileUrl || item.fileUrl === fileUrl);
+    if (!submission && !assignment && !portalAnnouncement) return next();
+
+    requireAuth(req, res, () => {
+      void (async () => {
+        const user = req.user;
+        if (!user) return res.status(401).end();
+        const teacherId = db.teachers.find(item => item.id === user.linkedId || item.nip === user.username)?.id;
+        let allowed = user.role === 'admin' || user.role === 'kepala_sekolah';
+        if (submission) {
+          const submittedAssignment = db.assignments.find(item => item.id === submission.assignmentId);
+          if (user.role === 'siswa') allowed = submission.studentId === user.linkedId || submission.studentNisn === user.username;
+          if ((user.role === 'guru' || user.role === 'ketua_kombel') && submittedAssignment) allowed = submittedAssignment.teacherId === teacherId;
+        }
+        if (assignment) {
+          if (user.role === 'siswa') {
+            const student = db.students.find(item => item.id === user.linkedId || item.nisn === user.username);
+            allowed = Boolean(student && assignment.classId === student.classId);
+          }
+          if (user.role === 'guru' || user.role === 'ketua_kombel') allowed = assignment.teacherId === teacherId;
+        }
+        if (portalAnnouncement) {
+          if (user.role === 'siswa') {
+            const student = db.students.find(item => item.id === user.linkedId || item.nisn === user.username);
+            allowed = Boolean(student && (portalAnnouncement.targetClass
+              ? portalAnnouncement.targetClass === student.classId
+              : portalAnnouncement.category === 'Umum' ||
+                (portalAnnouncement.category === 'Kelas X' && student.classId.startsWith('X-')) ||
+                (portalAnnouncement.category === 'Kelas XI' && student.classId.startsWith('XI-')) ||
+                (portalAnnouncement.category === 'Kelas XII' && student.classId.startsWith('XII-'))));
+          }
+          if (user.role === 'guru' || user.role === 'ketua_kombel') allowed = !portalAnnouncement.teacherId || portalAnnouncement.teacherId === teacherId;
+        }
+        if (!allowed) return res.status(403).json({ message: 'Anda tidak memiliki akses ke berkas ini.' });
+        next();
+      })().catch(next);
+    });
+  } catch (error) { next(error); }
+};
+app.get('/uploads/:filename', protectUploadedFile, async (req, res, next) => {
   const filename = path.basename(req.params.filename);
   if (filename !== req.params.filename) return res.status(404).end();
   return sendUploadedFile(filename, res, next);
@@ -2456,8 +2501,17 @@ app.delete('/api/students/:id', requireAdmin, async (req, res) => {
 // ----------------------------------------------------
 // 9. SCHEDULES (JADWAL PELAJARAN)
 // ----------------------------------------------------
-app.get('/api/schedules', async (_req, res) => {
+app.get('/api/schedules', requireAuth, async (req: AuthenticatedRequest, res) => {
   const db = await getDb();
+  if (req.user?.role === 'siswa') {
+    const student = db.students.find(item => item.id === req.user?.linkedId || item.nisn === req.user?.username);
+    return res.json(student ? db.schedules.filter(item => item.classId === student.classId) : []);
+  }
+  if (req.user?.role === 'guru' || req.user?.role === 'ketua_kombel') {
+    const teacher = db.teachers.find(item => item.id === req.user?.linkedId || item.nip === req.user?.username);
+    return res.json(teacher ? db.schedules.filter(item => item.teacherId === teacher.id) : []);
+  }
+  if (!['admin', 'kepala_sekolah'].includes(req.user?.role || '')) return res.status(403).json({ message: 'Anda tidak memiliki hak akses untuk melihat jadwal.' });
   res.json(db.schedules);
 });
 
@@ -2474,7 +2528,7 @@ app.post('/api/schedules', requireAdminOrTeacher, async (req, res) => {
     endTime: body.endTime || '08.30',
     subject: String(body.subject).trim(),
     teacherName: String(body.teacherName || 'Guru Mata Pelajaran').trim(),
-    teacherId: body.teacherId,
+    teacherId: undefined,
     classId: body.classId,
     room: body.room ? String(body.room).trim() : 'Ruang Teori',
     colorTag: body.colorTag || 'blue',
@@ -2482,35 +2536,73 @@ app.post('/api/schedules', requireAdminOrTeacher, async (req, res) => {
   };
 
   const db = await getDb();
+  const authReq = req as AuthenticatedRequest;
+  if (authReq.user?.role !== 'admin') {
+    const teacher = db.teachers.find(item => item.id === authReq.user?.linkedId || item.nip === authReq.user?.username);
+    if (!teacher) return res.status(403).json({ message: 'Profil guru tidak tertaut ke akun ini.' });
+    item.teacherId = teacher.id;
+    item.teacherName = teacher.fullName;
+  } else {
+    item.teacherId = body.teacherId;
+  }
   db.schedules.push(item);
   await saveDb();
   res.status(201).json(item);
 });
 
-app.put('/api/schedules/:id', requireAdminOrTeacher, async (req, res) => {
+app.put('/api/schedules/:id', requireAdminOrTeacher, async (req: AuthenticatedRequest, res) => {
   const db = await getDb();
   const index = db.schedules.findIndex(s => s.id === req.params.id);
   if (index < 0) return res.status(404).json({ message: 'Jadwal tidak ditemukan.' });
+  const teacher = db.teachers.find(item => item.id === req.user?.linkedId || item.nip === req.user?.username);
+  if (req.user?.role !== 'admin' && (!teacher || db.schedules[index].teacherId !== teacher.id)) {
+    return res.status(403).json({ message: 'Anda tidak memiliki akses ke jadwal ini.' });
+  }
 
   db.schedules[index] = {
     ...db.schedules[index],
     ...req.body,
     id: db.schedules[index].id,
+    ...(req.user?.role === 'admin' ? {} : { teacherId: db.schedules[index].teacherId, teacherName: db.schedules[index].teacherName }),
     updatedAt: new Date().toISOString()
   };
   await saveDb();
   res.json(db.schedules[index]);
 });
 
-app.delete('/api/schedules/:id', requireAdminOrTeacher, async (req, res) => {
+app.delete('/api/schedules/:id', requireAdminOrTeacher, async (req: AuthenticatedRequest, res) => {
   const db = await getDb();
+  const existing = db.schedules.find(s => s.id === req.params.id);
+  if (!existing) return res.status(404).json({ message: 'Jadwal tidak ditemukan.' });
+  const teacher = db.teachers.find(item => item.id === req.user?.linkedId || item.nip === req.user?.username);
+  if (req.user?.role !== 'admin' && (!teacher || existing.teacherId !== teacher.id)) {
+    return res.status(403).json({ message: 'Anda tidak memiliki akses ke jadwal ini.' });
+  }
   db.schedules = db.schedules.filter(s => s.id !== req.params.id);
   await saveDb();
   res.status(204).end();
 });
 
-app.get('/api/portal-announcements', requireAuth, async (_req, res) => {
+app.get('/api/portal-announcements', requireAuth, async (req: AuthenticatedRequest, res) => {
   const db = await getDb();
+  if (req.user?.role === 'siswa') {
+    const student = db.students.find(item => item.id === req.user?.linkedId || item.nisn === req.user?.username);
+    if (!student) return res.status(404).json({ message: 'Profil siswa untuk akun ini tidak ditemukan.' });
+    return res.json(db.portalAnnouncements.filter(item => item.targetClass
+      ? item.targetClass === student.classId
+      : item.category === 'Umum' ||
+        (item.category === 'Kelas X' && student.classId.startsWith('X-')) ||
+        (item.category === 'Kelas XI' && student.classId.startsWith('XI-')) ||
+        (item.category === 'Kelas XII' && student.classId.startsWith('XII-'))));
+  }
+  if (req.user?.role === 'guru' || req.user?.role === 'ketua_kombel') {
+    const teacher = db.teachers.find(item => item.id === req.user?.linkedId || item.nip === req.user?.username);
+    if (!teacher) return res.status(403).json({ message: 'Profil guru tidak tertaut ke akun ini.' });
+    return res.json(db.portalAnnouncements.filter(item => item.teacherId === teacher.id || !item.teacherId));
+  }
+  if (!['admin', 'kepala_sekolah'].includes(req.user?.role || '')) {
+    return res.status(403).json({ message: 'Anda tidak memiliki hak akses untuk melihat pengumuman portal.' });
+  }
   res.json(db.portalAnnouncements);
 });
 
@@ -2669,7 +2761,7 @@ app.put('/api/ppdb/website-info', requireAdminOrKombel, async (req, res) => {
   res.json(db.ppdbWebsiteInfo);
 });
 
-app.get('/api/ppdb', requireMonitoringStaff, async (_req, res) => {
+app.get('/api/ppdb', requireRole(['admin', 'kepala_sekolah']), async (_req, res) => {
   const db = await getDb();
   res.json(db.ppdb);
 });
@@ -2963,14 +3055,20 @@ app.post('/api/assignments', requireAdminOrTeacher, handleAssignmentUpload, asyn
     return res.status(400).json({ message: 'Judul, mata pelajaran, dan kelas wajib diisi.' });
   }
 
+  const db = await getDb();
+  const teacher = db.teachers.find(item => item.id === req.user?.linkedId || item.nip === req.user?.username);
+  if (req.user?.role !== 'admin' && !teacher) return res.status(403).json({ message: 'Profil guru tidak tertaut ke akun ini.' });
+  if (req.user?.role !== 'admin' && !isSchoolClass(String(body.classId).trim())) {
+    return res.status(400).json({ message: 'Kelas tugas tidak valid.' });
+  }
   const attachment = req.file;
   const attachmentUrl = attachment ? await persistUploadedFile(attachment, 'assignment-attachment') : undefined;
 
   const item: Assignment = {
     id: `asg-${Date.now()}`,
     subject: String(body.subject).trim(),
-    teacherId: body.teacherId || 'tch-1',
-    teacherName: String(body.teacherName || 'Guru Pengampu').trim(),
+    teacherId: req.user?.role === 'admin' ? String(body.teacherId || '') : teacher!.id,
+    teacherName: req.user?.role === 'admin' ? String(body.teacherName || 'Guru Pengampu').trim() : teacher!.fullName,
     classId: String(body.classId).trim(),
     className: String(body.className || body.classId).trim(),
     title: String(body.title).trim(),
@@ -2984,7 +3082,6 @@ app.post('/api/assignments', requireAdminOrTeacher, handleAssignmentUpload, asyn
     createdAt: new Date().toISOString()
   };
 
-  const db = await getDb();
   db.assignments.unshift(item);
   await saveDb();
   res.status(201).json(item);
@@ -3002,11 +3099,15 @@ app.put('/api/assignments/:id', requireAdminOrTeacher, handleAssignmentUpload, a
     return res.status(400).json({ message: 'Data tugas tidak valid.' });
   }
   const existing = db.assignments[index];
+  const teacher = db.teachers.find(item => item.id === req.user?.linkedId || item.nip === req.user?.username);
+  if (req.user?.role !== 'admin' && (!teacher || existing.teacherId !== teacher.id)) {
+    return res.status(403).json({ message: 'Anda tidak memiliki akses ke tugas ini.' });
+  }
   const attachment = req.file;
   const attachmentUrl = attachment ? await persistUploadedFile(attachment, 'assignment-attachment') : existing.attachmentUrl;
   db.assignments[index] = {
     ...existing,
-    ...body,
+    ...(req.user?.role === 'admin' ? body : { ...body, teacherId: existing.teacherId, teacherName: existing.teacherName }),
     id: existing.id,
     attachmentUrl,
     attachmentName: attachment ? path.basename(attachment.originalname) : existing.attachmentName,
@@ -3018,9 +3119,14 @@ app.put('/api/assignments/:id', requireAdminOrTeacher, handleAssignmentUpload, a
   res.json(db.assignments[index]);
 });
 
-app.delete('/api/assignments/:id', requireAdminOrTeacher, async (req, res) => {
+app.delete('/api/assignments/:id', requireAdminOrTeacher, async (req: AuthenticatedRequest, res) => {
   const db = await getDb();
   const existing = db.assignments.find(a => a.id === req.params.id);
+  if (!existing) return res.status(404).json({ message: 'Tugas tidak ditemukan.' });
+  const teacher = db.teachers.find(item => item.id === req.user?.linkedId || item.nip === req.user?.username);
+  if (req.user?.role !== 'admin' && (!teacher || existing.teacherId !== teacher.id)) {
+    return res.status(403).json({ message: 'Anda tidak memiliki akses ke tugas ini.' });
+  }
   db.assignments = db.assignments.filter(a => a.id !== req.params.id);
   db.submissions = db.submissions.filter(s => s.assignmentId !== req.params.id);
   await saveDb();
@@ -3029,7 +3135,7 @@ app.delete('/api/assignments/:id', requireAdminOrTeacher, async (req, res) => {
 });
 
 // Submissions
-app.get('/api/submissions/:id/file', requireAdminTeacherOrPrincipalRead, async (req: AuthenticatedRequest, res, next) => {
+app.get('/api/submissions/:id/file', requireRole(['admin', 'guru', 'ketua_kombel', 'kepala_sekolah']), async (req: AuthenticatedRequest, res, next) => {
   const db = await getDb();
   const submission = db.submissions.find(item => item.id === req.params.id);
   if (!submission || !submission.linkOrContent.startsWith('/uploads/')) {
@@ -3041,7 +3147,7 @@ app.get('/api/submissions/:id/file', requireAdminTeacherOrPrincipalRead, async (
   const teacherId = db.teachers.find(
     item => item.id === req.user?.linkedId || item.nip === req.user?.username
   )?.id;
-  if (req.user?.role === 'guru' && assignment.teacherId !== teacherId) {
+  if ((req.user?.role === 'guru' || req.user?.role === 'ketua_kombel') && assignment.teacherId !== teacherId) {
     return res.status(403).json({ message: 'Anda tidak memiliki akses ke berkas tugas ini.' });
   }
 
@@ -3066,6 +3172,10 @@ app.get('/api/submissions', requireAuth, async (req: AuthenticatedRequest, res) 
   // If student role, only see own submissions
   if (req.user?.role === 'siswa') {
     results = results.filter(s => s.studentId === req.user?.linkedId || s.studentNisn === req.user?.username);
+  } else if (req.user?.role === 'guru' || req.user?.role === 'ketua_kombel') {
+    const teacher = db.teachers.find(item => item.id === req.user?.linkedId || item.nip === req.user?.username);
+    const ownedAssignmentIds = new Set(db.assignments.filter(item => item.teacherId === teacher?.id).map(item => item.id));
+    results = results.filter(item => ownedAssignmentIds.has(item.assignmentId));
   } else {
     if (assignmentId) results = results.filter(s => s.assignmentId === assignmentId);
     if (studentId) results = results.filter(s => s.studentId === studentId);
@@ -3086,6 +3196,9 @@ app.post('/api/submissions', requireRole(['siswa']), upload.single('file'), asyn
   const db = await getDb();
   const assignment = db.assignments.find(a => a.id === body.assignmentId);
   if (!assignment) return res.status(404).json({ message: 'Tugas tidak ditemukan.' });
+  const student = db.students.find(item => item.id === req.user?.linkedId || item.nisn === req.user?.username);
+  if (!student) return res.status(403).json({ message: 'Profil siswa tidak tertaut ke akun ini.' });
+  if (assignment.classId !== student.classId) return res.status(403).json({ message: 'Tugas ini bukan untuk kelas Anda.' });
   const deadlineTime = getAssignmentDeadlineTime(assignment.deadline);
   if (Number.isFinite(deadlineTime) && Date.now() > deadlineTime) {
     return res.status(403).json({ message: 'Batas waktu pengumpulan tugas telah berakhir.' });
@@ -3110,9 +3223,9 @@ app.post('/api/submissions', requireRole(['siswa']), upload.single('file'), asyn
   const submissionItem: AssignmentSubmission = {
     id: existingIndex >= 0 ? db.submissions[existingIndex].id : `sub-${Date.now()}`,
     assignmentId: body.assignmentId,
-    studentId: req.user?.linkedId || `std-${req.user?.username}`,
-    studentName: req.user?.fullName || 'Siswa',
-    studentNisn: req.user?.username || '',
+    studentId: student.id,
+    studentName: student.fullName,
+    studentNisn: student.nisn,
     classId: assignment.classId,
     submittedAt: new Date().toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) + ' WIT',
     submissionType: body.submissionType || 'text',
@@ -3167,8 +3280,8 @@ app.put('/api/submissions/:id/grade', requireAdminOrTeacher, async (req: Authent
   // Guru hanya boleh menilai tugas yang diampunya.
   // Admin tetap memiliki kewenangan penuh.
   if (
-    req.user?.role === 'guru' &&
-    (!req.user.linkedId || assignment.teacherId !== req.user.linkedId)
+    (req.user?.role === 'guru' || req.user?.role === 'ketua_kombel') &&
+    assignment.teacherId !== db.teachers.find(item => item.id === req.user?.linkedId || item.nip === req.user?.username)?.id
   ) {
     return res.status(403).json({ message: 'Anda tidak berwenang menilai tugas ini.' });
   }
